@@ -2,266 +2,393 @@
 
 ### AI-Powered Urban Heat Intelligence & Mitigation Dashboard
 
-> **Monitoring urban heat risk across Moradabad, Uttar Pradesh — combining live weather, machine learning, hotspot detection, forecasting, and AI-generated recommendations in one dashboard.**
-
-[![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python\&logoColor=white)](https://www.python.org/)
-[![FastAPI](https://img.shields.io/badge/FastAPI-Backend-009688?logo=fastapi\&logoColor=white)](https://fastapi.tiangolo.com/)
-[![scikit-learn](https://img.shields.io/badge/scikit--learn-ML-F7931E?logo=scikit-learn\&logoColor=white)](https://scikit-learn.org/)
-[![JavaScript](https://img.shields.io/badge/JavaScript-Frontend-F7DF1E?logo=javascript\&logoColor=black)](https://developer.mozilla.org/en-US/docs/Web/JavaScript)
-[![Leaflet](https://img.shields.io/badge/Leaflet-Maps-199900?logo=leaflet\&logoColor=white)](https://leafletjs.com/)
-[![Gemini](https://img.shields.io/badge/Gemini-AI%20Recommendations-4285F4?logo=google\&logoColor=white)](https://ai.google.dev/)
-[![Docker](https://img.shields.io/badge/Docker-Ready-2496ED?logo=docker\&logoColor=white)](https://www.docker.com/)
+> **A full-stack environmental intelligence platform designed to visualize urban heat risk across Moradabad, Uttar Pradesh using live weather data, machine learning, forecasting, hotspot detection, and AI-powered recommendations.**
 
 ---
 
 ## 🌍 Overview
 
-**HeatShield AI** is a full-stack urban heat intelligence prototype designed to help visualize and understand heat-risk conditions across different zones of **Moradabad, Uttar Pradesh**.
+**HeatShield AI** is a full-stack AI/ML project focused on understanding and visualizing **urban heat risk at the zone level**.
 
-The system combines:
+The platform combines environmental data, machine learning, interactive visualization, forecasting, and generative AI to transform complex heat-related information into an easy-to-understand dashboard.
 
-* 🌤️ Live weather data
-* 🤖 Machine-learning based heat-risk scoring
-* 🗺️ Zone-level heat visualization
-* 🔥 Hotspot detection
-* 📈 Short-term forecasting
-* 💡 Explainable risk factors
-* 🧠 Gemini-powered recommendations
-* 📊 Historical trend tracking
-* ⚡ REST APIs + WebSocket live updates
+The system is designed around a simple flow:
 
-The goal is to turn environmental data into **simple, actionable information** for understanding where heat risk may be higher and what mitigation measures could be considered.
+```text
+Environmental Data
+       ↓
+Zone-Level Analysis
+       ↓
+Machine Learning
+       ↓
+Heat Risk Estimation
+       ↓
+Hotspot Detection
+       ↓
+Forecasting
+       ↓
+AI Recommendations
+```
+
+The project currently focuses on **Moradabad, Uttar Pradesh** as the prototype study area.
+
+> ⚠️ **Transparency:** Some environmental features and training data are currently synthetic or estimated. They are clearly labelled in the application and should not be interpreted as official measurements.
 
 ---
 
-# 🎥 Demo Preview
+# 🎥 Project Preview
 
-### Dashboard
+## 📊 Main Dashboard
 
-> Add your latest dashboard screenshot here.
+The main dashboard provides a centralized view of the current urban heat situation.
 
-```text
-docs/screenshots/dashboard-overview.png
-```
+It includes:
+
+* Current temperature
+* Average heat-risk score
+* Number of detected danger zones
+* Hottest estimated surface temperature
+* Greenery indicator
+* Zone-level risk
+* Interactive map
+* Current system status
 
 ![HeatShield AI Dashboard](docs/screenshots/dashboard-overview.png)
 
-### Heat Risk & Zone Analysis
+---
+
+## 🗺️ Zone & Heat Analysis
+
+The zone analysis interface allows users to inspect individual areas and understand their estimated heat-risk conditions.
+
+It can display:
+
+* Zone risk score
+* Risk category
+* Environmental factors
+* Hotspot status
+* Zone comparison
+* Heat-risk explanation
 
 ![HeatShield AI Zone Analysis](docs/screenshots/zone-analysis.png)
 
-### AI Recommendations
+---
 
-![HeatShield AI Recommendations](docs/screenshots/ai-recommendations.png)
+## 🤖 AI Recommendations
 
-> **Tip:** The screenshots above should be captured from the running dashboard at `http://localhost:8000/`.
+HeatShield AI can generate zone-specific recommendations using Gemini when the API is configured.
+
+Recommendations are designed around possible urban heat mitigation actions such as:
+
+* Increasing vegetation
+* Improving shade
+* Cool-roof strategies
+* Heat-response measures
+* Improving pedestrian comfort
+* Reducing heat exposure
+
+![AI Recommendations](docs/screenshots/ai-recommendations.png)
+
+> If Gemini is unavailable, the application automatically falls back to its rule-based recommendation engine.
 
 ---
 
 # ✨ Key Features
 
-## 🌤️ Live Weather Monitoring
+## 🌤️ 1. Live Weather Monitoring
 
-HeatShield AI connects to **Open-Meteo** to retrieve current weather information such as:
+The application retrieves current weather information and hourly forecast data.
 
-* Temperature
-* Relative humidity
-* Wind speed
-* Hourly forecast
+Current weather inputs include:
 
-Live weather is clearly marked as **LIVE** in the dashboard.
+* 🌡️ Temperature
+* 💧 Relative humidity
+* 💨 Wind speed
+* 📈 Hourly forecast
 
----
-
-## 🔥 Zone-Level Heat Risk
-
-The city is divided into multiple monitored zones.
-
-Each zone receives a heat-risk score based on environmental features and the trained ML model.
-
-The dashboard provides:
-
-* Risk score
-* Risk category
-* Zone comparison
-* Hotspot identification
-* Factor-level explanation
+The dashboard distinguishes live weather information from estimated or simulated environmental values.
 
 ---
 
-## 🗺️ Interactive Heat Map
+## 🔥 2. Zone-Level Heat Risk
 
-The dashboard provides a map-based view of the monitored zones.
+Moradabad is represented through multiple monitored zones.
 
-Users can quickly identify areas with comparatively higher or lower estimated heat risk.
+Each zone receives an estimated heat-risk score based on environmental features and the machine-learning pipeline.
 
-> Zone coordinates and land-cover features are currently prototype-level inputs rather than official municipal boundaries.
+The dashboard makes it possible to compare zones and quickly identify areas with comparatively higher estimated risk.
 
----
+### Example monitored zones
 
-## 🤖 AI-Powered Recommendations
-
-When Gemini is configured, HeatShield AI generates contextual recommendations for individual zones.
-
-Examples of intervention categories include:
-
-* 🌳 Increasing vegetation
-* 🏠 Cool-roof strategies
-* 🌤️ Increasing shade
-* 🚶 Improving shaded pedestrian areas
-* 💧 Heat-response measures
-
-The system automatically falls back to rule-based recommendations if the AI service is unavailable.
-
----
-
-## 📈 Heat Forecasting
-
-The system generates a short-term **1–48 hour forecast** using the available weather forecast and the heat-risk model.
-
-The dashboard can show:
-
-* Forecast trend
-* Expected risk changes
-* Uncertainty information
-* Current vs predicted conditions
+```text
+Civil Lines
+Katghar
+Majhola
+Pakwara
+Asalatpura
+Galshaheed
+Budh Bazaar
+Moradabad Central
+Rampur Road
+Delhi Road
+New Moradabad
+```
 
 ---
 
-## 🔎 Explainable Heat Risk
+# 🗺️ 3. Interactive Heat Map
 
-Instead of only showing a number, the system attempts to explain **why a zone receives its risk score**.
+The dashboard includes an interactive map for visualizing zone-level heat conditions.
 
-Zone-level factors can include:
+The map helps users quickly understand:
 
-* Built-up density
-* Vegetation estimate
-* Road density
-* Water proximity
-* Environmental conditions
+```text
+LOW RISK
+   ↓
+MODERATE RISK
+   ↓
+HIGH RISK
+   ↓
+HOTSPOT
+```
 
-This makes the output easier to interpret than a black-box risk score.
+Each monitored location can be inspected individually.
 
----
-
-## 🚨 Hotspot Detection
-
-HeatShield AI identifies potentially important zones using a combination of:
-
-* Risk thresholds
-* Statistical comparison
-* Zone-level feature differences
-
-Hotspots are highlighted in the dashboard for quick inspection.
+> Current map locations are prototype-level coordinates and do not represent official municipal ward boundaries.
 
 ---
 
-## ⚡ Real-Time Dashboard Updates
+# 🤖 4. AI-Powered Recommendations
 
-The backend exposes a WebSocket endpoint:
+HeatShield AI integrates **Gemini** as an optional recommendation engine.
+
+For a selected zone, the system can provide contextual recommendations based on available environmental information.
+
+### Recommendation flow
+
+```text
+Selected Zone
+      ↓
+Environmental Features
+      ↓
+Heat Risk Information
+      ↓
+Gemini AI
+      ↓
+Structured Recommendation
+      ↓
+Dashboard
+```
+
+The system is designed with fallback behaviour:
+
+```text
+Gemini Available
+       ↓
+AI Recommendation
+
+Gemini Unavailable
+       ↓
+Rule-Based Recommendation
+```
+
+This allows the dashboard to continue functioning even when the external AI service is unavailable.
+
+---
+
+# 📈 5. Short-Term Heat Forecast
+
+HeatShield AI uses available weather forecast information to estimate how heat-risk conditions may change over the next **1–48 hours**.
+
+The forecast interface can help visualize:
+
+* Current conditions
+* Future risk trend
+* Expected changes
+* Forecast uncertainty
+
+The forecasting pipeline combines weather information with the heat-risk model.
+
+---
+
+# 🔎 6. Explainable Heat Risk
+
+Instead of showing only a single risk number, the system attempts to provide context about the factors contributing to the estimate.
+
+Potential factors include:
+
+* 🌳 Vegetation
+* 🏢 Built-up area
+* 🛣️ Road density
+* 💧 Water proximity
+* 🌡️ Temperature
+* 💨 Wind
+* 💧 Humidity
+
+This makes the dashboard easier to understand and inspect.
+
+---
+
+# 🚨 7. Hotspot Detection
+
+The application identifies potentially important heat zones using zone-level risk information and feature differences.
+
+Hotspot detection helps prioritize areas that may require closer inspection.
+
+The dashboard can highlight these zones so users do not have to manually inspect every location.
+
+---
+
+# 📊 8. Historical Trends
+
+HeatShield AI stores runtime history to visualize changes in system conditions.
+
+Historical information can be used to observe:
+
+* Risk changes
+* Temperature trends
+* System behaviour
+* Previous dashboard states
+
+The current history system is designed for prototype and demonstration purposes.
+
+---
+
+# ⚡ 9. Real-Time Updates
+
+The backend supports WebSocket-based live updates.
 
 ```text
 /ws/live
 ```
 
-The dashboard receives updated system information without requiring a full page reload.
+This allows the dashboard to receive updated application state without requiring a complete page refresh.
 
 ---
 
-## 🧪 Built-In Testing
+# 🧪 10. Automated Testing
 
-The project includes automated tests covering:
+The project includes automated tests covering important parts of the application.
+
+Testing areas include:
 
 * API behaviour
-* Model functionality
-* Recommendation logic
+* Machine-learning model
+* Recommendation engine
 * Application state
 * System status
 
-Current repository includes **68 tests**.
+### Current test suite
+
+```text
+68 automated tests
+```
 
 ---
 
 # 🧠 System Architecture
 
 ```text
-                         ┌──────────────────────┐
-                         │     Open-Meteo       │
-                         │   Live Weather API   │
-                         └──────────┬───────────┘
-                                    │
-                                    ▼
-┌─────────────────────────────────────────────────────────┐
-│                    FastAPI Backend                      │
-│                                                         │
-│  Weather Service → State Management → ML Pipeline      │
-│                         │                               │
-│                         ├── Hotspot Detection           │
-│                         ├── Forecasting                 │
-│                         ├── Explainability              │
-│                         └── AI Recommendations          │
-└───────────────────────┬─────────────────────────────────┘
-                        │
-             ┌──────────┴──────────┐
-             │                     │
-             ▼                     ▼
-       REST API              WebSocket
-     /api/...                 /ws/live
-             │                     │
-             └──────────┬──────────┘
-                        ▼
-              ┌───────────────────┐
-              │   Web Dashboard   │
-              │ HTML/CSS/JS       │
-              │ Leaflet + Chart.js│
-              └───────────────────┘
-```
-
-### Data → Intelligence → Action
-
-```text
-Weather Data
-     │
-     ▼
-Zone Features
-     │
-     ▼
-Machine Learning Model
-     │
-     ├──────────────► Heat Risk Score
-     │
-     ├──────────────► Hotspot Detection
-     │
-     ├──────────────► Forecast
-     │
-     └──────────────► Explanation
-                         │
-                         ▼
-                  Gemini AI / Rules
-                         │
-                         ▼
-                Actionable Recommendations
+                         ┌───────────────────────┐
+                         │      Open-Meteo       │
+                         │    Weather Service    │
+                         └───────────┬───────────┘
+                                     │
+                                     ▼
+                         ┌───────────────────────┐
+                         │    FastAPI Backend    │
+                         └───────────┬───────────┘
+                                     │
+             ┌───────────────────────┼───────────────────────┐
+             │                       │                       │
+             ▼                       ▼                       ▼
+      Weather Service         ML Risk Model          State Management
+             │                       │                       │
+             │                       ├───────────────┐       │
+             │                       │               │       │
+             ▼                       ▼               ▼       ▼
+       Live Weather           Risk Prediction   Hotspots   History
+                                     │
+                                     ▼
+                              Forecasting
+                                     │
+                                     ▼
+                           Explainable Factors
+                                     │
+                                     ▼
+                            AI Recommendation
+                                     │
+                                     ▼
+                              Gemini / Rules
+                                     │
+                                     ▼
+                         ┌───────────────────────┐
+                         │    Web Dashboard      │
+                         │                       │
+                         │ HTML / CSS / JS       │
+                         │ Leaflet / Chart.js    │
+                         └───────────────────────┘
 ```
 
 ---
 
-# 🛠️ Tech Stack
+# 🔄 Data → Intelligence → Action
 
-| Layer                | Technologies                |
-| -------------------- | --------------------------- |
-| **Frontend**         | HTML5, CSS3, JavaScript     |
-| **Visualization**    | Chart.js                    |
-| **Mapping**          | Leaflet                     |
-| **Backend**          | Python, FastAPI             |
-| **Real-time**        | WebSocket                   |
-| **Machine Learning** | scikit-learn, Pandas, NumPy |
-| **Weather Data**     | Open-Meteo                  |
-| **Generative AI**    | Google Gemini API           |
-| **Data Storage**     | SQLite runtime history      |
-| **Model Storage**    | Joblib                      |
-| **Testing**          | Pytest                      |
-| **Deployment**       | Docker                      |
-| **Version Control**  | Git + GitHub                |
+The complete processing flow can be summarized as:
+
+```text
+┌──────────────────┐
+│ Environmental    │
+│ Data             │
+└────────┬─────────┘
+         │
+         ▼
+┌──────────────────┐
+│ Zone Features    │
+└────────┬─────────┘
+         │
+         ▼
+┌──────────────────┐
+│ ML Risk Model    │
+└────────┬─────────┘
+         │
+         ├───────────────► Heat Risk Score
+         │
+         ├───────────────► Hotspot Detection
+         │
+         ├───────────────► Forecast
+         │
+         └───────────────► Risk Factors
+                                  │
+                                  ▼
+                         ┌────────────────┐
+                         │ Gemini / Rules │
+                         └───────┬────────┘
+                                 │
+                                 ▼
+                      Actionable Suggestions
+```
+
+---
+
+# 🛠️ Technology Stack
+
+| Layer                   | Technology              |
+| ----------------------- | ----------------------- |
+| Frontend                | HTML5, CSS3, JavaScript |
+| Backend                 | Python, FastAPI         |
+| Machine Learning        | scikit-learn            |
+| Data Processing         | Pandas, NumPy           |
+| Maps                    | Leaflet                 |
+| Charts                  | Chart.js                |
+| Weather                 | Open-Meteo              |
+| Generative AI           | Google Gemini           |
+| Database                | SQLite                  |
+| Model Storage           | Joblib                  |
+| Real-Time Communication | WebSocket               |
+| Testing                 | Pytest                  |
+| Containerization        | Docker                  |
+| Version Control         | Git                     |
 
 ---
 
@@ -271,6 +398,7 @@ Machine Learning Model
 heatshield-ai/
 │
 ├── backend/
+│   │
 │   ├── main.py
 │   ├── requirements.txt
 │   ├── requirements-dev.txt
@@ -292,8 +420,17 @@ heatshield-ai/
 ├── frontend/
 │   ├── index.html
 │   ├── app.js
+│   │
 │   ├── media/
+│   │   ├── awareness.mp4
+│   │   ├── awareness.webm
+│   │   ├── bg-city.jpg
+│   │   ├── map-base.jpg
+│   │   └── poster.jpg
+│   │
 │   └── vendor/
+│       ├── chart.umd.js
+│       └── leaflet/
 │
 ├── ml/
 │   ├── generate_dataset.py
@@ -307,7 +444,11 @@ heatshield-ai/
 │   ├── DATA_SOURCES.md
 │   ├── MODEL_CARD.md
 │   ├── NEXT_STEPS.md
-│   └── CHANGELOG.md
+│   ├── CHANGELOG.md
+│   └── screenshots/
+│       ├── dashboard-overview.png
+│       ├── zone-analysis.png
+│       └── ai-recommendations.png
 │
 ├── tests/
 │   ├── test_api.py
@@ -326,80 +467,67 @@ heatshield-ai/
 
 # 🚀 Run Locally
 
-### 1. Clone the repository
+## 1. Clone the Repository
 
 ```bash
 git clone https://github.com/kanak-verma-developer/heatshield-ai.git
+```
+
+```bash
 cd heatshield-ai
 ```
 
-### 2. Create a virtual environment
+---
 
-```bash
+## 2. Create Virtual Environment
+
+### Windows
+
+```powershell
 python -m venv .venv
 ```
 
-Activate on Windows:
+Activate it:
 
 ```powershell
 .venv\Scripts\activate
 ```
 
-### 3. Install dependencies
+---
 
-```bash
+## 3. Install Dependencies
+
+```powershell
 pip install -r backend/requirements.txt
 ```
 
-### 4. Optional — enable Gemini recommendations
+For development and testing:
 
-Create `.env` in the project root:
+```powershell
+pip install -r backend/requirements-dev.txt
+```
+
+---
+
+## 4. Configure Gemini AI
+
+Create a `.env` file in the project root:
 
 ```env
 GEMINI_API_KEY=your_api_key_here
 HEATSHIELD_LLM_PROVIDER=gemini
 ```
 
-**Never commit `.env` to GitHub.**
+The API key is loaded through the backend and is **not exposed in the frontend**.
 
-### 5. Start the application
-
-```bash
-uvicorn backend.main:app --reload --port 8000
-```
-
-Open:
-
-```text
-http://localhost:8000/
-```
-
-API documentation:
-
-```text
-http://localhost:8000/docs
-```
-
-Health check:
-
-```text
-http://localhost:8000/api/health
-```
+Never commit the `.env` file.
 
 ---
 
-# 🐳 Docker
+## 5. Start the Backend
 
-Build:
-
-```bash
-docker build -t heatshield-ai .
-```
-
-Run:
-
-```bash
-docker run -p 8000:8000 heatshield-ai
+```powershell
+uvicorn backend.main:app --reload --port 8000
 ```
 
 Then open:
@@ -410,118 +538,380 @@ http://localhost:8000/
 
 ---
 
-# 🧪 Testing
+# 🧪 Run Tests
 
-Install development dependencies:
+Run the complete test suite:
 
-```bash
-pip install -r backend/requirements-dev.txt
-```
-
-Run tests:
-
-```bash
+```powershell
 pytest tests/ -v
 ```
 
-The project currently contains **68 automated tests**.
+Current repository:
+
+```text
+68 automated tests
+```
+
+---
+
+# 🐳 Docker
+
+Build the image:
+
+```powershell
+docker build -t heatshield-ai .
+```
+
+Run the application:
+
+```powershell
+docker run -p 8000:8000 heatshield-ai
+```
+
+The application will then be available locally on port `8000`.
+
+---
+
+# 📡 API Overview
+
+The FastAPI backend provides endpoints for:
+
+```text
+Weather
+   │
+   ├── Current conditions
+   └── Forecast
+       
+Zones
+   │
+   ├── Zone information
+   └── Heat-risk analysis
+
+Recommendations
+   │
+   └── AI / Rule-based suggestions
+
+History
+   │
+   └── Historical observations
+
+System
+   │
+   └── Health / status information
+
+WebSocket
+   │
+   └── Live dashboard updates
+```
+
+Interactive API documentation is available through the running FastAPI application.
 
 ---
 
 # 📊 Data Transparency
 
-HeatShield AI intentionally distinguishes between real data, estimates, simulations, and unavailable sources.
+HeatShield AI intentionally separates **live**, **estimated**, **synthetic**, and **unavailable** data.
 
-| Data / Component          | Current Status                         |
-| ------------------------- | -------------------------------------- |
-| Current weather           | 🟢 **LIVE** — Open-Meteo               |
-| Hourly forecast           | 🟢 **LIVE** — Open-Meteo               |
-| ML pipeline               | 🟢 **WORKING**                         |
-| Historical dashboard data | 🟢 **WORKING**                         |
-| Gemini recommendations    | 🟢 **LIVE when API key is configured** |
-| Zone land-cover values    | 🟡 **ESTIMATE**                        |
-| Surface temperature       | 🟡 **ESTIMATE**                        |
-| Zone boundaries           | 🟡 **APPROXIMATE**                     |
-| ML training dataset       | 🟠 **SYNTHETIC**                       |
-| Satellite data            | ⚪ **NOT CONNECTED**                    |
-| IoT sensors               | ⚪ **NOT CONNECTED**                    |
+| Component                | Status                  |
+| ------------------------ | ----------------------- |
+| Current weather          | 🟢 LIVE                 |
+| Hourly forecast          | 🟢 LIVE                 |
+| Historical runtime data  | 🟢 WORKING              |
+| ML pipeline              | 🟢 WORKING              |
+| Gemini recommendations   | 🟢 LIVE when configured |
+| Zone land-cover features | 🟡 ESTIMATE             |
+| Surface temperature      | 🟡 ESTIMATE             |
+| Zone coordinates         | 🟡 APPROXIMATE          |
+| ML training dataset      | 🟠 SYNTHETIC            |
+| Satellite data           | ⚪ NOT CONNECTED         |
+| IoT sensors              | ⚪ NOT CONNECTED         |
 
-### Important ML limitation
+---
 
-The current model is trained on **synthetic data**.
+# 🤖 Machine Learning
 
-Therefore, reported model metrics such as R² describe performance on that synthetic dataset and **should not be interpreted as validated real-world prediction accuracy**.
+The project includes a complete machine-learning pipeline.
 
-Real-world validation would require reliable historical environmental and ground-truth heat-risk data.
+### Current pipeline
+
+```text
+Synthetic Dataset
+       ↓
+Feature Preparation
+       ↓
+Train / Validation
+       ↓
+Model Training
+       ↓
+Model Evaluation
+       ↓
+Model Serialization
+       ↓
+Dashboard Prediction
+```
+
+The trained model is stored using Joblib and can be loaded by the backend.
+
+---
+
+## ⚠️ ML Limitation
+
+The current model is trained using **synthetic data**.
+
+Therefore, metrics obtained from this dataset represent model behaviour on the synthetic training/evaluation setup.
+
+They **do not represent validated real-world prediction accuracy**.
+
+Real-world deployment would require:
+
+* Historical temperature measurements
+* Land-surface temperature
+* Reliable land-cover information
+* Ground observations
+* Satellite-derived features
+* Seasonal datasets
+* Proper validation across different locations and time periods
+
+---
+
+# 🛰️ Current Data Limitations
+
+Some components are intentionally marked as estimates because reliable external datasets have not yet been integrated.
+
+### Current prototype
+
+```text
+Live Weather
+      +
+Estimated Zone Features
+      +
+Synthetic ML Training Data
+      +
+Forecast Data
+      +
+AI Recommendations
+```
+
+### Future production system
+
+```text
+Live Weather
+      +
+Satellite Data
+      +
+GIS Boundaries
+      +
+IoT Sensors
+      +
+Historical Ground Data
+      +
+Validated ML Model
+      +
+AI Recommendations
+```
+
+This distinction is important because the current application is an **AI/ML prototype**, not an official municipal heat-monitoring system.
 
 ---
 
 # 🔐 Security
 
-* API keys are loaded through environment variables.
-* `.env` is excluded through `.gitignore`.
-* No Gemini API key is stored in frontend code.
+HeatShield AI follows basic API-key security practices.
+
+* API keys are stored in environment variables.
+* `.env` is excluded from Git.
+* Gemini keys are not placed inside frontend JavaScript.
 * `.env.example` contains placeholders only.
+* Secrets are not intentionally included in the repository.
 
 ---
 
-# 🗺️ Future Roadmap
+# 🌱 Future Roadmap
 
-### Data
+## 🛰️ Environmental Data
 
-* [ ] Integrate Sentinel-2 / Landsat derived environmental features
-* [ ] Add reliable land-surface temperature data
-* [ ] Replace hand-set zone priors with measured datasets
-* [ ] Add official GIS boundaries where available
-
-### Intelligence
-
-* [ ] Validate model using real-world historical data
-* [ ] Improve calibration across seasons
-* [ ] Add uncertainty-aware risk estimation
-* [ ] Expand forecasting capabilities
-
-### Platform
-
-* [ ] Add user authentication
-* [ ] Add notification / alert system
-* [ ] Add city-level scalability
-* [ ] Deploy production backend
-* [ ] Add monitoring and observability
+* [ ] Integrate satellite-derived land-surface temperature
+* [ ] Add Sentinel/Landsat environmental features
+* [ ] Replace estimated land-cover values with measured datasets
+* [ ] Add official GIS zone boundaries
+* [ ] Add historical environmental datasets
 
 ---
 
-# 📚 Documentation
+## 🧠 Machine Learning
 
-* [`API.md`](docs/API.md) — API endpoints
-* [`ARCHITECTURE.md`](docs/ARCHITECTURE.md) — system architecture
-* [`DATA_SOURCES.md`](docs/DATA_SOURCES.md) — data sources and limitations
-* [`MODEL_CARD.md`](docs/MODEL_CARD.md) — model details and limitations
-* [`NEXT_STEPS.md`](docs/NEXT_STEPS.md) — development roadmap
-* [`CHANGELOG.md`](docs/CHANGELOG.md) — project changes
-
----
-
-# 🌱 Why HeatShield AI?
-
-HeatShield AI explores how **machine learning + environmental data + real-time dashboards + generative AI** can be combined to make urban heat information easier to understand and act upon.
-
-The project is designed as a transparent prototype: where real data is available, it is labelled as live; where assumptions or synthetic data are used, they are explicitly identified.
+* [ ] Train using real-world datasets
+* [ ] Improve model calibration
+* [ ] Add uncertainty-aware predictions
+* [ ] Improve seasonal modelling
+* [ ] Validate predictions against ground observations
+* [ ] Explore advanced forecasting models
 
 ---
 
-## 👩‍💻 Built By
+## 📡 IoT Integration
 
-**Kanak Verma**
+Future versions can integrate physical environmental sensors for:
 
-B.Tech — Computer Science & Engineering (Data Science)
+* Temperature
+* Humidity
+* Air quality
+* Noise
+* Light
+* Other environmental indicators
+
+This would allow the platform to combine:
+
+```text
+Satellite
+   +
+Weather
+   +
+IoT
+   +
+ML
+   +
+AI
+```
+
+---
+
+## 🖥️ Platform Improvements
+
+* [ ] User authentication
+* [ ] Personalized dashboards
+* [ ] Heat alerts
+* [ ] Notification system
+* [ ] City-level scalability
+* [ ] Production deployment
+* [ ] Monitoring and observability
+* [ ] Advanced analytics
+
+---
+
+# 💡 Project Highlights
+
+HeatShield AI demonstrates the integration of multiple technologies into a single working application.
+
+### Full-Stack Development
+
+```text
+Frontend
+   ↕
+REST API
+   ↕
+Backend Services
+   ↕
+ML Pipeline
+   ↕
+Data
+```
+
+### AI Integration
+
+```text
+Application Data
+      ↓
+Context Generation
+      ↓
+Gemini
+      ↓
+Structured Response
+      ↓
+Dashboard
+```
+
+### Real-Time Architecture
+
+```text
+Backend State
+      ↓
+WebSocket
+      ↓
+Live Dashboard
+```
+
+---
+
+# 🎯 What This Project Demonstrates
+
+This project brings together:
+
+* Full-stack web development
+* REST API development
+* FastAPI
+* Machine learning
+* Data processing
+* Environmental data analysis
+* Interactive maps
+* Data visualization
+* Forecasting
+* Generative AI
+* WebSockets
+* SQLite
+* Automated testing
+* Docker
+* Git/GitHub
+* API integration
+* Security-aware configuration
+
+---
+
+# 🌍 Project Vision
+
+Urban heat is influenced by multiple environmental and structural factors.
+
+HeatShield AI explores how these different data sources can be brought together into a single interface that makes heat-related information easier to understand.
+
+The long-term vision is to move from a prototype using estimated and synthetic inputs toward a system supported by:
+
+```text
+Real Environmental Data
+        +
+Satellite Observations
+        +
+Ground Sensors
+        +
+Historical Records
+        +
+Machine Learning
+        +
+Generative AI
+```
+
+The current project provides the foundation for that direction while clearly identifying which components are already working and which still require real-world data integration.
+
+---
+
+# 👩‍💻 Built By
+
+## Kanak Verma
+
+**B.Tech — Computer Science & Engineering (Data Science)**
+
+**Focus Areas**
+
+```text
+Full-Stack Development
+AI / Machine Learning
+Data-Driven Applications
+Environmental Intelligence
+```
 
 Moradabad, Uttar Pradesh, India
 
-**Focus:** Full-Stack Development • AI/ML • Data-Driven Applications
+---
+
+# ⭐ Repository
+
+If you find **HeatShield AI** interesting, you can explore the complete source code here:
+
+**GitHub Repository**
+
+https://github.com/kanak-verma-developer/heatshield-ai
 
 ---
 
-⭐ If you find the project interesting, consider starring the repository.
+## 🔥 HeatShield AI
 
-[GitHub Repository](https://github.com/kanak-verma-developer/heatshield-ai)
+> **From environmental data to intelligent heat-risk insights.**
