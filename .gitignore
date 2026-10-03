@@ -1,0 +1,13 @@
+__pycache__/
+*.pyc
+.pytest_cache/
+.env
+# runtime history DB (regenerated automatically)
+data/heatshield_history.db
+data/heatshield_history.db-wal
+data/heatshield_history.db-shm
+# regenerable with: python ml/generate_dataset.py
+data/training_data.csv
+# NOTE: backend/models/*.joblib IS committed on purpose, so a fresh clone
+# runs without training. Re-train (python ml/train.py) and re-commit it
+# whenever you change the data or the scikit-learn version.

@@ -1,0 +1,9 @@
+__pycache__/
+*.pyc
+.pytest_cache/
+.git/
+tests/
+docs/
+data/heatshield_history.db*
+data/training_data.csv
+.env

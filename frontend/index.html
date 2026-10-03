@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HeatShield AI — Moradabad Heat Dashboard</title>
+<script src="vendor/chart.umd.js"></script>   <!-- Chart.js 4.4.3, bundled locally (MIT) -->
+<link rel="stylesheet" href="vendor/leaflet/leaflet.css" />   <!-- Leaflet 1.9.4, bundled locally (BSD-2) -->
+<script src="vendor/leaflet/leaflet.js"></script>
+<style>
+  :root{
+    --bg:#060b18; --glass:rgba(255,255,255,.045); --glass2:rgba(255,255,255,.07); --border:rgba(255,255,255,.09);
+    --text:#eaf1fb; --muted:#8c9bb5; --green:#22c55e; --cyan:#2dd4bf; --blue:#60a5fa;
+    --orange:#f59e0b; --red:#ef4444; --darkred:#7f1d1d;
+    --low:#22c55e; --mod:#eab308; --high:#f97316; --vhigh:#ef4444; --extreme:#b91c1c;
+  }
+  *{box-sizing:border-box;}
+  html{scroll-behavior:smooth;}
+  body{margin:0;background:radial-gradient(1200px 600px at 80% -10%,#10234a 0%,transparent 60%),radial-gradient(900px 500px at -10% 110%,#0b2a3a 0%,transparent 60%),var(--bg);
+    color:var(--text);font-family:'Segoe UI',Inter,system-ui,-apple-system,sans-serif;min-height:100vh;}
+  a{color:inherit;}
+  #bgnet{position:fixed;inset:0;width:100%;height:100%;z-index:0;pointer-events:none;opacity:.55;}
+  .app{position:relative;z-index:1;display:grid;grid-template-columns:240px 1fr;min-height:100vh;}
+  .glass{background:var(--glass);border:1px solid var(--border);border-radius:16px;backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);}
+  /* SIDEBAR */
+  .sidebar{background:rgba(6,11,24,.7);backdrop-filter:blur(14px);border-right:1px solid var(--border);display:flex;flex-direction:column;padding:22px 14px;position:sticky;top:0;height:100vh;}
+  .brand{display:flex;align-items:center;gap:10px;padding:4px 8px 22px;}
+  .brand .logo{width:38px;height:38px;border-radius:11px;background:linear-gradient(135deg,var(--cyan),var(--blue));display:flex;align-items:center;justify-content:center;font-size:19px;box-shadow:0 0 18px rgba(45,212,191,.45);}
+  .brand h1{font-size:17px;margin:0;font-weight:700;}
+  .brand p{margin:2px 0 0;font-size:11px;color:var(--muted);}
+  nav{display:flex;flex-direction:column;gap:4px;}
+  nav a{display:flex;align-items:center;gap:11px;padding:11px 13px;border-radius:11px;color:var(--muted);text-decoration:none;font-size:14px;transition:background .2s,color .2s,transform .2s;cursor:pointer;border:1px solid transparent;}
+  nav a:hover{background:var(--glass2);color:var(--text);transform:translateX(3px);}
+  nav a.active{background:linear-gradient(90deg,rgba(45,212,191,.18),rgba(96,165,250,.06));color:var(--cyan);border-color:rgba(45,212,191,.3);}
+  .status-box{margin-top:auto;background:var(--glass);border:1px solid var(--border);border-radius:14px;padding:14px;font-size:12px;color:var(--muted);line-height:1.5;}
+  .status-box strong{color:var(--text);display:flex;align-items:center;gap:7px;font-size:13px;margin-bottom:6px;}
+  .status-box .dot{display:inline-block;width:8px;height:8px;border-radius:50%;}
+  /* TOPBAR */
+  .main{display:flex;flex-direction:column;min-width:0;}
+  header.topbar{display:flex;align-items:center;gap:10px;padding:14px 26px;border-bottom:1px solid var(--border);background:rgba(6,11,24,.55);backdrop-filter:blur(14px);flex-wrap:wrap;position:sticky;top:0;z-index:50;}
+  .pill{display:inline-flex;align-items:center;gap:8px;padding:7px 15px;border-radius:999px;font-size:12.5px;border:1px solid var(--border);background:var(--glass);color:var(--muted);white-space:nowrap;}
+  .pill b{color:var(--text);font-weight:600;}
+  .pill.ok{border-color:rgba(34,197,94,.5);background:rgba(34,197,94,.12);color:#86efac;}
+  .pill.ok b{color:#bbf7d0;}
+  .pulse{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--green);animation:pulse 1.8s infinite;}
+  .pulse.demo{background:var(--orange);animation-name:pulseO;}
+  .pulse.offline{background:var(--red);animation:none;}
+  @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(34,197,94,.6);}70%{box-shadow:0 0 0 9px rgba(34,197,94,0);}100%{box-shadow:0 0 0 0 rgba(34,197,94,0);}}
+  @keyframes pulseO{0%{box-shadow:0 0 0 0 rgba(245,158,11,.6);}70%{box-shadow:0 0 0 9px rgba(245,158,11,0);}100%{box-shadow:0 0 0 0 rgba(245,158,11,0);}}
+  .spacer{flex:1;}
+  .risk-ring{width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;border:3px solid var(--high);transition:border-color .5s;}
+  .content{padding:22px 26px 30px;display:flex;flex-direction:column;gap:18px;}
+  /* entrance: one orchestrated reveal */
+  @keyframes rise{from{opacity:0;transform:translateY(14px);}to{opacity:1;transform:none;}}
+  .section.active .kpi,.section.active .card{animation:rise .6s cubic-bezier(.2,.7,.2,1) both;}
+  .kpi:nth-child(2){animation-delay:.06s!important}.kpi:nth-child(3){animation-delay:.12s!important}.kpi:nth-child(4){animation-delay:.18s!important}.kpi:nth-child(5){animation-delay:.24s!important}.kpi:nth-child(6){animation-delay:.3s!important}
+  .grid2 .card:nth-child(1),#statusCard{animation-delay:.2s!important}.grid2 .card:nth-child(2){animation-delay:.3s!important}.grid3 .card:nth-child(1){animation-delay:.35s!important}.grid3 .card:nth-child(2){animation-delay:.42s!important}.grid3 .card:nth-child(3){animation-delay:.5s!important}
+  /* KPI */
+  .kpis{display:grid;grid-template-columns:repeat(6,1fr);gap:14px;}
+  .kpi{background:var(--glass);border:1px solid var(--border);border-radius:16px;padding:16px 18px;backdrop-filter:blur(14px);transition:transform .25s,border-color .25s,box-shadow .25s;min-width:0;}
+  .kpi:hover{transform:translateY(-3px);border-color:rgba(45,212,191,.45);box-shadow:0 10px 30px rgba(45,212,191,.12);}
+  .kpi .label{font-size:12.5px;color:var(--muted);display:flex;align-items:center;gap:8px;margin-bottom:10px;}
+  .kpi .ico{width:26px;height:26px;border-radius:8px;display:inline-flex;align-items:center;justify-content:center;background:rgba(96,165,250,.14);font-size:14px;}
+  .kpi .value{font-size:clamp(19px,1.85vw,28px);font-weight:700;display:flex;align-items:center;gap:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .kpi .trend{font-size:11.5px;margin-top:6px;color:var(--muted);}
+  .alertdot{width:14px;height:14px;border-radius:50%;background:var(--red);box-shadow:0 0 12px var(--red);animation:pulseR 1.6s infinite;flex:none;}
+  .alertdot.none{background:var(--green);box-shadow:0 0 10px var(--green);animation:none;}
+  @keyframes pulseR{0%{box-shadow:0 0 0 0 rgba(239,68,68,.7);}70%{box-shadow:0 0 0 12px rgba(239,68,68,0);}100%{box-shadow:0 0 0 0 rgba(239,68,68,0);}}
+  /* CARDS */
+  .grid2{display:grid;grid-template-columns:2fr 1fr;gap:18px;align-items:stretch;}
+  .grid3{display:grid;grid-template-columns:1.3fr 1fr 1.2fr;gap:18px;align-items:stretch;}
+  .card{background:var(--glass);border:1px solid var(--border);border-radius:16px;padding:18px 20px;backdrop-filter:blur(14px);display:flex;flex-direction:column;min-width:0;}
+  .card-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:14px;flex-wrap:wrap;}
+  .card-head h3{margin:0;font-size:15px;font-weight:600;}
+  .card-head .sub{display:block;font-size:12px;color:var(--muted);font-weight:400;margin-top:3px;}
+  .card-head .badges{display:inline-flex;gap:6px;flex-wrap:wrap;}
+  .legend{display:flex;gap:14px;font-size:12px;color:var(--muted);margin-bottom:12px;flex-wrap:wrap;}
+  .legend span{display:flex;align-items:center;gap:6px;}
+  .legend i{width:10px;height:10px;border-radius:3px;display:inline-block;}
+  #mapwrap{position:relative;flex:1;min-height:440px;border-radius:12px;overflow:hidden;border:1px solid var(--border);}
+  #map,#leafletMap{position:absolute;inset:0;width:100%;height:100%;background:#0a1222;}
+  .leaflet-container{background:#0a1222 !important;font-family:inherit;}
+  .leaflet-tile-pane{filter:invert(1) hue-rotate(195deg) brightness(.8) contrast(.95) saturate(.55);}
+  .zone-marker-label{background:transparent;border:none;box-shadow:none;color:#fff;font-weight:700;font-size:11px;text-align:center;text-shadow:0 0 4px #000,0 0 4px #000;white-space:nowrap;}
+  .zone-marker-label:before{display:none;}
+  .leaflet-interactive{transition:fill-opacity .3s;}
+  .maphint{margin-top:10px;font-size:12px;color:var(--muted);}
+  .section{display:none;} .section.active{display:flex;}
+  #map{cursor:pointer;} .zone-cell{stroke:none;}
+  .zone-label{font-size:12px;fill:#e9f7f0;paint-order:stroke;stroke:#0b1210;stroke-width:3px;font-weight:600;pointer-events:none;text-anchor:middle;}
+  .zone-label.risk{font-size:15px;font-weight:800;}
+  /* zone detail */
+  .zone-name{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:12px;}
+  .zone-name h2{margin:0;font-size:20px;}
+  .tag{font-size:11.5px;padding:4px 11px;border-radius:20px;font-weight:600;white-space:nowrap;}
+  .tag.low{background:rgba(34,197,94,.15);color:var(--low);} .tag.mod{background:rgba(234,179,8,.15);color:var(--mod);}
+  .tag.high{background:rgba(249,115,22,.16);color:var(--high);} .tag.vhigh{background:rgba(239,68,68,.16);color:#f87171;}
+  .tag.extreme{background:rgba(185,28,28,.25);color:#fca5a5;}
+  .risk-donut{display:flex;align-items:center;gap:16px;margin-bottom:12px;}
+  .risk-donut canvas{width:96px !important;height:96px !important;}
+  .risk-donut .num{position:relative;margin-left:-112px;width:96px;text-align:center;font-size:26px;font-weight:800;}
+  .risk-donut .num small{display:block;font-size:10.5px;color:var(--muted);font-weight:400;}
+  .metrics-list{display:flex;flex-direction:column;gap:2px;font-size:13px;margin-bottom:12px;}
+  .metrics-list div{display:flex;justify-content:space-between;color:var(--muted);padding:6px 0;border-bottom:1px solid var(--border);}
+  .metrics-list div b{color:var(--text);font-weight:600;}
+  .explain{font-size:12.5px;color:#b6c2d8;line-height:1.55;margin-bottom:12px;padding:12px;background:rgba(255,255,255,.04);border-radius:10px;border:1px solid var(--border);}
+  .explain b{color:var(--text);}
+  .factor{margin-bottom:9px;}
+  .factor .flabel{display:flex;justify-content:space-between;font-size:12px;color:var(--muted);margin-bottom:4px;}
+  .factor .bar{height:6px;background:rgba(255,255,255,.07);border-radius:4px;overflow:hidden;}
+  .factor .bar i{display:block;height:100%;border-radius:4px;transition:width .8s cubic-bezier(.2,.7,.2,1);}
+  .fhead{font-size:12px;color:var(--muted);margin-bottom:8px;}
+  /* lists */
+  .chartbox{position:relative;flex:1;min-height:210px;}
+  .hotspot-item,.rec-item{display:flex;gap:12px;padding:11px 0;border-bottom:1px solid var(--border);font-size:13px;align-items:flex-start;}
+  .hotspot-item:last-child,.rec-item:last-child{border-bottom:none;}
+  .hs-badge{background:var(--red);color:#fff;font-size:10.5px;font-weight:700;border-radius:6px;padding:3px 8px;height:fit-content;white-space:nowrap;}
+  .hs-badge.MODERATE{background:var(--mod);color:#000;} .hs-badge.HIGH{background:var(--high);}
+  .hs-badge.CRITICAL,.hs-badge.EXTREME{background:var(--extreme);}
+  .rec-why{font-weight:500;line-height:1.45;}
+  .rec-priority{font-size:11px;color:var(--muted);margin-top:3px;}
+  .rank{margin-top:14px;} .rank h4{margin:0 0 8px;font-size:12.5px;color:var(--muted);font-weight:500;}
+  .rrow{display:grid;grid-template-columns:1fr 90px 30px;gap:10px;align-items:center;padding:6px 0;font-size:12.5px;cursor:pointer;}
+  .rrow:hover b{color:var(--cyan);} .rrow .fbar{height:7px;}
+  .empty{display:flex;align-items:center;gap:12px;padding:14px;border-radius:12px;background:rgba(34,197,94,.08);border:1px dashed rgba(34,197,94,.35);color:#bbf7d0;font-size:13px;line-height:1.45;}
+  .empty .big{font-size:24px;}
+  small.dim,.dim{color:var(--muted);}
+  /* system check */
+  .chips{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;}
+  .chip{display:flex;flex-direction:column;gap:6px;padding:12px 14px;border-radius:12px;background:rgba(255,255,255,.04);border:1px solid var(--border);font-size:13px;}
+  .chip .badge{margin-left:0;align-self:flex-start;}
+  details.more{margin-top:14px;}
+  details.more summary{cursor:pointer;color:var(--cyan);font-size:13px;list-style:none;}
+  details.more summary::-webkit-details-marker{display:none;}
+  details.more summary:before{content:'▸ ';} details.more[open] summary:before{content:'▾ ';}
+  .legendrow{font-size:12px;color:var(--muted);margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;}
+  #offlineBanner{display:none;position:fixed;top:0;left:0;right:0;z-index:9999;background:#7f1d1d;color:#fff;padding:10px 16px;font-size:13px;text-align:center;}
+  #offlineBanner code{background:rgba(0,0,0,.35);padding:1px 6px;border-radius:4px;}
+  .badge{display:inline-block;font-size:10.5px;font-weight:600;padding:3px 9px;border-radius:999px;margin-left:6px;vertical-align:middle;border:1px solid transparent;white-space:nowrap;}
+  .badge.lvl-OK{background:rgba(34,197,94,.14);color:#4ade80;border-color:rgba(34,197,94,.4);}
+  .badge.lvl-DEMO{background:rgba(249,115,22,.14);color:#fb923c;border-color:rgba(249,115,22,.45);}
+  .badge.lvl-ESTIMATE{background:rgba(234,179,8,.13);color:#facc15;border-color:rgba(234,179,8,.4);}
+  .badge.lvl-WARN{background:rgba(239,68,68,.14);color:#f87171;border-color:rgba(239,68,68,.5);}
+  .badge.lvl-ERROR{background:#7f1d1d;color:#fff;border-color:#ef4444;}
+  .badge.lvl-MISSING,.badge.lvl-INFO{background:rgba(148,163,184,.12);color:#a3b1c6;border-color:rgba(148,163,184,.35);}
+  .status-row{display:flex;gap:10px;align-items:flex-start;padding:9px 0;border-bottom:1px solid var(--border);font-size:13px;}
+  .status-row:last-child{border-bottom:none;}
+  .status-row .sl{min-width:190px;font-weight:600;} .status-row .sm{color:var(--muted);}
+  .warnline{color:#f87171;font-size:12.5px;margin-top:6px;}
+  .frow{display:grid;grid-template-columns:60px 1fr 120px;gap:14px;align-items:center;padding:11px 0;border-top:1px solid var(--border);font-size:13.5px;}
+  .fbar{height:10px;border-radius:6px;background:rgba(255,255,255,.07);overflow:hidden;}
+  .fbar i{display:block;height:100%;border-radius:6px;transition:width .9s cubic-bezier(.2,.7,.2,1);}
+
+  /* SPLASH */
+  #splash{position:fixed;inset:0;z-index:10000;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;background:radial-gradient(800px 500px at 50% 40%,#10234a 0%,#060b18 70%);transition:opacity .7s ease,visibility .7s;}
+  #splash.done{opacity:0;visibility:hidden;pointer-events:none;}
+  .sp-logo{position:relative;width:150px;height:150px;display:flex;align-items:center;justify-content:center;}
+  .sp-logo:before,.sp-logo:after{content:'';position:absolute;inset:0;border-radius:50%;border:2px solid rgba(45,212,191,.5);animation:ring 2.4s ease-out infinite;}
+  .sp-logo:after{animation-delay:1.2s;}
+  @keyframes ring{from{transform:scale(.55);opacity:.9;}to{transform:scale(1.5);opacity:0;}}
+  .sp-logo svg{width:110px;height:110px;overflow:visible;filter:drop-shadow(0 0 16px rgba(45,212,191,.6));}
+  .sp-shield{fill:rgba(45,212,191,.08);stroke:url(#spg);stroke-width:3.5;stroke-linejoin:round;stroke-dasharray:320;stroke-dashoffset:320;animation:draw 1.5s .2s cubic-bezier(.6,0,.2,1) forwards,fillin .8s 1.4s forwards;}
+  .sp-sun{fill:none;stroke:#fbbf24;stroke-width:3;stroke-linecap:round;opacity:0;transform-origin:50px 46px;animation:fadein .5s 1.3s forwards,spin 14s linear infinite;}
+  .sp-core{fill:#fbbf24;opacity:0;animation:fadein .5s 1.2s forwards;}
+  @keyframes draw{to{stroke-dashoffset:0;}} @keyframes fillin{to{fill:rgba(45,212,191,.2);}} @keyframes fadein{to{opacity:1;}} @keyframes spin{to{transform:rotate(360deg);}}
+  .sp-name{font-size:34px;font-weight:700;letter-spacing:.5px;opacity:0;transform:translateY(10px);animation:rise .7s 1.1s forwards;}
+  .sp-name span{color:var(--cyan);}
+  .sp-tag{color:var(--muted);font-size:14px;margin-top:-10px;opacity:0;animation:fadein .6s 1.5s forwards;}
+  .sp-steps{display:flex;flex-direction:column;gap:7px;min-width:250px;font-size:13px;color:var(--muted);opacity:0;animation:fadein .5s 1.7s forwards;}
+  .sp-steps div{display:flex;gap:10px;align-items:center;}
+  .sp-steps i{width:16px;height:16px;border-radius:50%;border:2px solid rgba(255,255,255,.2);display:inline-flex;align-items:center;justify-content:center;font-size:10px;font-style:normal;}
+  .sp-steps .ok{color:var(--text);} .sp-steps .ok i{background:var(--green);border-color:var(--green);color:#04210f;}
+  .sp-steps .bad{color:#fca5a5;} .sp-steps .bad i{background:var(--red);border-color:var(--red);color:#fff;}
+  .sp-bar{width:250px;height:4px;border-radius:4px;background:rgba(255,255,255,.1);overflow:hidden;}
+  .sp-bar i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--cyan),var(--blue));animation:load 3.2s .3s ease-out forwards;}
+  @keyframes load{to{width:100%;}}
+  #spSkip{position:absolute;bottom:26px;background:none;border:1px solid var(--border);color:var(--muted);border-radius:999px;padding:6px 16px;cursor:pointer;font-size:12px;}
+  #spSkip:hover{color:var(--text);border-color:var(--cyan);}
+  /* topbar buttons + modal */
+  button.pill{cursor:pointer;font-family:inherit;transition:border-color .2s,color .2s;} button.pill:hover{border-color:var(--cyan);color:var(--text);}
+  #secModal{position:fixed;inset:0;z-index:9000;display:none;align-items:center;justify-content:center;background:rgba(3,7,16,.7);backdrop-filter:blur(6px);padding:16px;}
+  #secModal.open{display:flex;animation:fadein .25s forwards;opacity:0;}
+  .modal{width:min(560px,100%);max-height:88vh;overflow:auto;background:#0b1326;border:1px solid var(--border);border-radius:18px;padding:22px;box-shadow:0 30px 80px rgba(0,0,0,.6);}
+  .modal h2{margin:0 0 4px;font-size:18px;} .modal .x{float:right;background:none;border:0;color:var(--muted);font-size:20px;cursor:pointer;}
+  .srow{display:flex;gap:12px;padding:11px 0;border-bottom:1px solid var(--border);font-size:13px;}
+  .srow:last-child{border-bottom:0;} .srow .mk{flex:none;width:22px;height:22px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;}
+  .srow .mk.ok{background:rgba(34,197,94,.2);color:#4ade80;} .srow .mk.warn{background:rgba(245,158,11,.2);color:#fbbf24;}
+  .score{display:flex;align-items:center;gap:12px;margin:14px 0 6px;font-size:13px;color:var(--muted);} .score b{font-size:26px;color:var(--text);}
+  /* AWARENESS VIDEO */
+  .adcard{padding:0;overflow:hidden;position:relative;min-height:300px;}
+  .adcard video,.adfall{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;}
+  .adfall{background:linear-gradient(120deg,#1b2a52,#0e4a52 40%,#5a2a14 80%,#1b2a52);background-size:300% 300%;animation:drift 16s ease infinite;}
+  @keyframes drift{50%{background-position:100% 50%;}}
+  .adshade{position:absolute;inset:0;background:linear-gradient(0deg,rgba(4,8,18,.88) 0%,rgba(4,8,18,.1) 55%,rgba(4,8,18,.35) 100%);}
+  .adtop{position:absolute;top:16px;left:20px;right:20px;display:flex;justify-content:space-between;align-items:center;}
+  .adtop .pill{background:rgba(6,11,24,.55);}
+  .adtip{position:absolute;left:24px;right:24px;bottom:22px;}
+  .adtip small{color:var(--cyan);font-size:12.5px;}
+  .adtip p{margin:4px 0 12px;font-size:clamp(20px,2.6vw,30px);font-weight:700;line-height:1.25;max-width:760px;transition:opacity .5s,transform .5s;}
+  .adtip p.swap{opacity:0;transform:translateY(8px);}
+  #adVideo{opacity:0;transition:opacity 1.4s ease;} #adVideo.on{opacity:1;}
+  .adcard{min-height:360px;}
+  .adtip p.hi{font-size:clamp(15px,1.6vw,20px);font-weight:500;color:#cfe3ff;margin:-6px 0 14px;}
+  .adtop{gap:10px;flex-wrap:wrap;}
+  .dots{display:flex;gap:6px;} .dots i{width:22px;height:4px;border-radius:3px;background:rgba(255,255,255,.25);transition:background .3s,width .3s;} .dots i.on{background:var(--cyan);width:36px;}
+
+  /* IMAGE BACKGROUND (whole site, softly visible) */
+  #bgimg{position:fixed;inset:0;z-index:0;background:url(media/bg-city.jpg) right center/cover no-repeat;opacity:.24;pointer-events:none;animation:kb 60s ease-in-out infinite alternate;}
+  @keyframes kb{from{transform:scale(1);}to{transform:scale(1.09) translateX(-1.5%);}}
+  /* MAP: glow + pulse (real map) and image-based fallback */
+  #mapwrap.fb{background:#0a1222 url(media/map-base.jpg) center/cover;}
+  #mapwrap.fb:after{content:'';position:absolute;inset:0;background:rgba(5,10,24,.5);pointer-events:none;}
+  #map{background:transparent;z-index:2;}
+  .zg{cursor:pointer;} .zg .zn{opacity:0;transition:opacity .2s;} .zg:hover .zn{opacity:1;}
+  .zs{font-size:15px;font-weight:800;fill:#fff;paint-order:stroke;stroke:rgba(0,0,0,.75);stroke-width:3px;text-anchor:middle;pointer-events:none;}
+  .zn{font-size:11px;font-weight:600;fill:#fff;paint-order:stroke;stroke:rgba(0,0,0,.8);stroke-width:3px;text-anchor:middle;pointer-events:none;}
+  .ring{fill:none;stroke-width:2;transform-box:fill-box;transform-origin:center;animation:ring 2.2s ease-out infinite;pointer-events:none;}
+  .pring{position:absolute;left:-20px;top:-20px;width:40px;height:40px;border-radius:50%;border:2px solid var(--c);animation:ring 2.2s ease-out infinite;pointer-events:none;}
+  .zg circle.core{transition:fill .6s;} .zg circle.glow{transition:r .8s;}
+  /* IMAGE BANDS + video fallback */
+  .imgband{padding:0;overflow:hidden;position:relative;min-height:230px;}
+  .ib-img{position:absolute;inset:0;background:url(media/map-base.jpg) center/cover;animation:kb 40s ease-in-out infinite alternate;}
+  .ib-shade{position:absolute;inset:0;background:linear-gradient(90deg,rgba(4,8,18,.88),rgba(4,8,18,.25));}
+  .ib-txt{position:absolute;left:26px;bottom:22px;right:26px;} .ib-txt b{display:block;font-size:clamp(18px,2.2vw,26px);margin-bottom:4px;} .ib-txt span{color:#b6c2d8;font-size:13.5px;}
+  .adfall{background:url(media/map-base.jpg) center/cover !important;animation:kb 30s ease-in-out infinite alternate !important;}
+  @media (max-width:1250px){.kpis{grid-template-columns:repeat(3,1fr);}.chips{grid-template-columns:repeat(3,1fr);}}
+  @media (max-width:1100px){.app{grid-template-columns:1fr;}.sidebar{position:static;height:auto;flex-direction:row;align-items:center;overflow-x:auto;padding:10px 12px;gap:10px;}
+    .brand{padding:0;flex-shrink:0;}.brand p,.status-box{display:none;}nav{flex-direction:row;}nav a{white-space:nowrap;padding:8px 12px;}.grid2,.grid3{grid-template-columns:1fr;}#mapwrap{min-height:360px;}}
+  @media (max-width:640px){header.topbar{padding:10px 14px;}.content{padding:14px;gap:14px;}.kpis{grid-template-columns:repeat(2,1fr);gap:10px;}.kpi{padding:12px;}.kpi .value{font-size:21px;}.chips{grid-template-columns:repeat(2,1fr);}.status-row{flex-direction:column;gap:2px;}#mapwrap{min-height:300px;}.frow{grid-template-columns:44px 1fr 90px;}}
+  @media (prefers-reduced-motion:reduce){*{animation:none !important;transition:none !important;}}
+</style>
+
+</head>
+<body>
+<div id="bgimg" aria-hidden="true"></div>
+<canvas id="bgnet"></canvas>
+<div id="splash" role="status" aria-live="polite">
+  <div class="sp-logo"><svg viewBox="0 0 100 100" aria-hidden="true">
+    <defs><linearGradient id="spg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#2dd4bf"/><stop offset="1" stop-color="#60a5fa"/></linearGradient></defs>
+    <path class="sp-shield" d="M50 6 L86 20 V48 C86 70 70 86 50 94 C30 86 14 70 14 48 V20 Z"/>
+    <circle class="sp-core" cx="50" cy="46" r="9"/>
+    <g class="sp-sun"><path d="M50 26v-6M50 72v-6M30 46h-6M76 46h-6M36 32l-4-4M68 60l-4-4M64 32l4-4M32 60l4-4"/></g>
+  </svg></div>
+  <div class="sp-name">Heat<span>Shield</span> AI</div>
+  <div class="sp-tag">Moradabad heat monitor</div>
+  <div class="sp-steps" id="spSteps">
+    <div data-k="srv"><i></i>Reaching the server</div>
+    <div data-k="sec"><i></i>Checking secure connection</div>
+    <div data-k="dat"><i></i>Loading live data</div>
+  </div>
+  <div class="sp-bar"><i></i></div>
+  <button id="spSkip" type="button">Skip</button>
+</div>
+<div id="secModal" role="dialog" aria-modal="true" aria-labelledby="secTitle">
+  <div class="modal"><button class="x" id="secClose" aria-label="Close">×</button>
+    <h2 id="secTitle">🔒 Security audit</h2><div class="dim" style="font-size:12.5px">Live check of this dashboard's protection</div>
+    <div class="score"><b id="secScore">—</b><span id="secScoreTxt">checking…</span></div>
+    <div id="secList"></div>
+  </div>
+</div>
+
+<div id="offlineBanner">⚠ Can't reach the server, so no live numbers are shown. Start it with <code>uvicorn backend.main:app --port 8000</code>. Retrying automatically…</div>
+<div class="app">
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="logo">🛡️</div>
+      <div><h1>HeatShield AI</h1><p>Moradabad heat monitor</p></div>
+    </div>
+    <nav id="sideNav">
+      <a data-target="sec-overview" class="active">🏠 Overview</a>
+      <a data-target="sec-forecast">📈 Forecast</a>
+      <a data-target="sec-model-performance">🎯 Model accuracy</a>
+      <a data-target="sec-data-sources">🛰️ Data sources</a>
+    </nav>
+    <div class="status-box">
+      <strong><span class="dot" style="background:var(--orange)"></span><span id="dataStatusLine">Demo data</span></strong>
+      <div id="dataStatusDesc">Values are simulated for now.</div>
+      <div style="margin-top:8px" id="lastUpdated">Last updated: —</div>
+    </div>
+  </aside>
+
+  <div class="main">
+    <header class="topbar">
+      <span class="pill ok" id="sysPill"><span class="pulse demo" id="connPulse"></span><b id="connLabel">Connecting…</b></span>
+      <span class="pill">Data: <b id="hdrDataSource">—</b></span>
+      <span class="pill">Updated <b id="hdrTime">—</b><span id="staleBadge"></span></span>
+      <span class="pill">Model: <b id="modelStatus">Loading…</b></span>
+      <div class="spacer"></div>
+      <button class="pill" id="secBtn" type="button">🔒 Security audit</button>
+      <span class="pill">🌤️ <b id="hdrTemp">—°C</b> Moradabad</span>
+      <span class="pill" style="padding:4px 14px 4px 5px"><span class="risk-ring" id="hdrRiskRing">—</span><span>Heat risk <b id="hdrRiskLabel">—</b></span></span>
+    </header>
+
+    <div class="content section active" id="sec-overview">
+      <div class="kpis" id="kpiRow"></div>
+
+      <div class="card" id="statusCard">
+        <div class="card-head"><h3>System check<span class="sub">Quick look at what is live and what is estimated</span></h3></div>
+        <div class="chips" id="statusChips"><span class="dim">Checking…</span></div>
+        <details class="more">
+          <summary>See full details</summary>
+          <div id="statusList" class="dim" style="margin-top:8px">Loading…</div>
+          <div class="legendrow">
+            <span class="badge lvl-OK" style="margin-left:0">Working</span> live ·
+            <span class="badge lvl-DEMO">Demo</span> simulated ·
+            <span class="badge lvl-ESTIMATE">Estimate</span> not measured ·
+            <span class="badge lvl-WARN">Check</span> needs a look ·
+            <span class="badge lvl-ERROR">Error</span> broken ·
+            <span class="badge lvl-MISSING">Not connected</span>
+          </div>
+        </details>
+      </div>
+
+      <div class="grid2">
+        <div class="card" id="cardHeatMap">
+          <div class="card-head"><h3>Heat risk map<span class="sub">Moradabad zones, coloured by risk · click a circle for details</span></h3><span class="badges" id="badgeMap"></span></div>
+          <div class="legend">
+            <span><i style="background:var(--low)"></i>Low</span>
+            <span><i style="background:var(--mod)"></i>Moderate</span>
+            <span><i style="background:var(--high)"></i>High</span>
+            <span><i style="background:var(--vhigh)"></i>Very high</span>
+            <span><i style="background:var(--extreme)"></i>Extreme</span>
+          </div>
+          <div id="mapwrap"><div id="leafletMap"></div><svg id="map" viewBox="0 0 700 520" style="display:none;"></svg></div>
+          <div class="maphint">Zoom in to see zone names. Scores are model estimates, not official ward data.</div>
+        </div>
+
+        <div class="card" id="zoneCard">
+          <div class="zone-name"><h2 id="zName">—</h2><span class="tag low" id="zTag">—</span></div>
+          <div class="risk-donut">
+            <canvas id="zDonut" width="96" height="96"></canvas>
+            <div class="num"><span id="zScore">—</span><small>out of 100</small></div>
+          </div>
+          <div id="badgeZone" style="margin-bottom:8px;"></div>
+          <div class="metrics-list" id="zMetrics"></div>
+          <div class="explain" id="zExplain">Click a zone on the map to see why it is hot or cool.</div>
+          <div id="zFactors"></div>
+        </div>
+      </div>
+
+      <div class="card adcard" id="adCard" aria-label="Heat safety awareness video">
+        <div class="adfall"></div>
+        <video id="adVideo" autoplay muted loop playsinline preload="auto" poster="media/poster.jpg"><source src="media/awareness.mp4" type="video/mp4"><source src="media/awareness.webm" type="video/webm"></video>
+        <div class="adshade"></div>
+        <div class="adtop"><span class="pill">☀️ Heat safety awareness</span><span class="pill" style="border-color:rgba(239,68,68,.55);color:#fecaca">🚑 Heatstroke emergency? Call 108</span><button class="pill" id="adToggle" type="button">⏸ Pause</button></div>
+        <div class="adtip"><small id="adNum">Tip 1 of 5</small><p id="adText">Drink water every 20 minutes, even if you do not feel thirsty.</p><p class="hi" id="adHi">हर 20 मिनट में पानी पिएं, प्यास न लगे तब भी।</p><div class="dots" id="adDots"></div></div>
+      </div>
+
+      <div class="grid3">
+        <div class="card" id="cardTrend">
+          <div class="card-head"><h3>Heat risk over time<span class="sub">City average, updates live</span></h3><span class="badges" id="badgeTrend"></span></div>
+          <div class="chartbox"><canvas id="trendChart"></canvas></div>
+        </div>
+        <div class="card" id="cardHotspots">
+          <div class="card-head"><h3>Hottest areas<span class="sub">Zones that need attention first</span></h3><span class="badges" id="badgeHotspots"></span></div>
+          <div id="hotspotList"></div>
+        </div>
+        <div class="card" id="cardRecommendations">
+          <div class="card-head"><h3>What to do<span class="sub" id="recSourceTag">Suggested actions for the selected zone</span></h3><span class="badges" id="badgeRecs"></span></div>
+          <div id="recList"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="content section" id="sec-forecast">
+      <div class="card">
+        <div class="card-head"><h3>Next 6 hours<span class="sub" id="forecastZoneLabel">—</span></h3><span class="badges" id="badgeForecast"></span></div>
+        <div id="forecastBody" class="dim">Loading…</div>
+      </div>
+      <div class="card imgband"><div class="ib-img"></div><div class="ib-shade"></div><div class="ib-txt"><b>Plan around the hottest hours</b><span>Risk is usually highest between 12 pm and 4 pm. Move outdoor work to early morning or evening.</span></div></div>
+    </div>
+
+    <div class="content section" id="sec-data-sources">
+      <div class="card">
+        <div class="card-head"><h3>Data sources<span class="sub">Where the numbers come from</span></h3></div>
+        <div id="dataSourcesBody" class="dim">Loading…</div>
+      </div>
+      <div class="card imgband"><div class="ib-img"></div><div class="ib-shade"></div><div class="ib-txt"><b>Every number is labelled</b><span>Live, demo or estimate, so you always know what is measured and what is assumed.</span></div></div>
+    </div>
+
+    <div class="content section" id="sec-model-performance">
+      <div class="card">
+        <div class="card-head"><h3>Model accuracy<span class="sub">How well the prediction model scores</span></h3><span class="badges" id="badgeModel"></span></div>
+        <div id="modelPerfBody" class="dim">Loading…</div>
+      </div>
+      <div class="card imgband"><div class="ib-img"></div><div class="ib-shade"></div><div class="ib-txt"><b>Tested before you see it</b><span>The model is checked on data it has never seen, then used to score every Moradabad zone.</span></div></div>
+    </div>
+  </div>
+</div>
+
+<script src="app.js" defer></script>
+</body>
+</html>
