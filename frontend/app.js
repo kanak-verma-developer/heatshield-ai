@@ -1,7 +1,11 @@
 // HeatShield - simple public dashboard (Hindi / English).
 (function () {
   'use strict';
-  const API = location.protocol === 'file:' ? 'http://localhost:8000' : location.origin;
+  
+  const API = location.protocol === 'file:'
+    ? 'http://localhost:8000'
+    : 'https://heatshield-ai-75xc.onrender.com';
+
   const CITIES = ['Moradabad', 'Delhi'];
   const COLORS = {safe:'#22c55e', caution:'#eab308', extreme_caution:'#f97316', danger:'#ef4444', extreme_danger:'#b91c1c'};
   const ORDER = ['safe', 'caution', 'extreme_caution', 'danger', 'extreme_danger'];
