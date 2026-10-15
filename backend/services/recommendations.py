@@ -885,3 +885,63 @@ def get_recommendation(
         )
 
         return fallback
+
+
+# =====================================================================
+# SIMPLE PUBLIC ADVICE  (added: plain Hindi + English tips by heat level)
+# =====================================================================
+_SIMPLE_TIPS = {
+    "safe": {
+        "en": ["Weather is comfortable. Normal activity is fine.",
+               "Keep drinking water through the day.",
+               "Check the forecast before long outdoor plans."],
+        "hi": ["मौसम आरामदायक है। सामान्य काम कर सकते हैं।",
+               "दिन भर पानी पीते रहें।",
+               "लंबे बाहरी कार्यक्रम से पहले पूर्वानुमान देख लें।"],
+    },
+    "caution": {
+        "en": ["Drink water regularly, even if you are not thirsty.",
+               "Take short breaks in the shade during outdoor work.",
+               "Wear light, loose cotton clothes.",
+               "Do not leave children or pets in a parked vehicle."],
+        "hi": ["प्यास न लगे तब भी नियमित रूप से पानी पिएं।",
+               "बाहर काम करते समय छाँव में थोड़ी-थोड़ी देर आराम करें।",
+               "हल्के, ढीले सूती कपड़े पहनें।",
+               "बंद खड़ी गाड़ी में बच्चों या जानवरों को अकेला न छोड़ें।"],
+    },
+    "extreme_caution": {
+        "en": ["Avoid the sun between 12 pm and 4 pm if you can.",
+               "Drink water, ORS, lemon water or buttermilk often.",
+               "Cover your head and rest in shade every hour.",
+               "Check on elderly neighbours and small children."],
+        "hi": ["हो सके तो दोपहर 12 से 4 बजे तक धूप में न निकलें।",
+               "पानी, ORS, नींबू पानी या छाछ बार-बार लें।",
+               "सिर ढककर रखें और हर घंटे छाँव में आराम करें।",
+               "बुज़ुर्गों और छोटे बच्चों का ध्यान रखें।"],
+    },
+    "danger": {
+        "en": ["Stay indoors in the afternoon. Heat stroke is possible.",
+               "Move heavy outdoor work to early morning or evening.",
+               "Drink water, ORS or buttermilk every 20 minutes.",
+               "Dizzy, confused or very hot skin? Move to shade and call 108."],
+        "hi": ["दोपहर में घर के अंदर रहें। लू लगने का ख़तरा है।",
+               "भारी बाहरी काम सुबह जल्दी या शाम को करें।",
+               "हर 20 मिनट में पानी, ORS या छाछ पिएं।",
+               "चक्कर, उलझन या बहुत गर्म त्वचा हो तो छाँव में जाएँ और 108 पर कॉल करें।"],
+    },
+    "extreme_danger": {
+        "en": ["Stay inside in a cool place. Going out is dangerous.",
+               "Drink water or ORS often, even if you feel fine.",
+               "Check on elderly, sick and small children right now.",
+               "Confusion, fainting or very hot dry skin: call 108 immediately."],
+        "hi": ["ठंडी जगह पर घर के अंदर रहें। बाहर निकलना ख़तरनाक है।",
+               "ठीक लगे तब भी पानी या ORS बार-बार पिएं।",
+               "बुज़ुर्गों, बीमारों और छोटे बच्चों का अभी ध्यान रखें।",
+               "बेहोशी, उलझन या बहुत गर्म सूखी त्वचा हो तो तुरंत 108 पर कॉल करें।"],
+    },
+}
+
+
+def simple_advice(level):
+    """{'en': [...], 'hi': [...]} tips for a heat level."""
+    return _SIMPLE_TIPS.get(level, _SIMPLE_TIPS["safe"])

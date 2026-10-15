@@ -2,19 +2,9 @@
 HeatShield AI backend - FastAPI application.
 
 Run (from the project root):   uvicorn backend.main:app --port 8000
-or, from inside backend/:      uvicorn main:app --port 8000
 Dashboard:                     http://localhost:8000/        (served by this app)
-Swagger docs:                  http://localhost:8000/docs
 
-Environment variables (all optional, see .env.example):
-  ALLOWED_ORIGINS               comma-separated CORS origins
-  HEATSHIELD_RATE_LIMIT_PER_MIN per-IP limit for /api/* (default 240, 0 = off)
-  HEATSHIELD_MAX_WS             max simultaneous WebSocket clients (default 50)
-  HEATSHIELD_API_KEY            if set, POST /api/predict requires X-API-Key
-  HEATSHIELD_REC_TTL            recommendation cache seconds (default 600)
-  GEMINI_API_KEY                enables Gemini-generated recommendations (GEMINI_MODEL optional)
-  ANTHROPIC_API_KEY             enables Claude-generated recommendations instead
-  HEATSHIELD_LLM_PROVIDER       gemini | claude | none (only needed if both keys are set)
+Cities: Moradabad (default) and Delhi. Most /api/* endpoints take ?city=Delhi.
 """
 import asyncio
 import os
@@ -31,11 +21,11 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
-from data.zones import ZONES, ZONE_BY_ID
+from data.zones import ZONES, ZONE_BY_ID, ALL_ZONE_BY_ID, CITIES, zones_for_city
 from ml.hotspot_detection import detect_hotspots
-from backend.services.state import state, ModelNotAvailable, FEATURES
+from backend.services.state import state, ModelNotAvailable, WeatherUnavailable, FEATURES, PRIMARY_CITY
 from backend.services.recommendations import get_recommendation, active_provider, llm_status
-from backend.services.weather import weather_status
+from backend.services.weather import weather_status, get_city_weather
 
 FRONTEND_DIR = os.path.join(os.path.dirname(__file__), "..", "frontend")
 
@@ -58,15 +48,13 @@ def _load_dotenv(path):
 
 _load_dotenv(os.path.join(os.path.dirname(__file__), "..", ".env"))
 
-# Interactive API docs are off by default (they list every endpoint to strangers).
-# Set HEATSHIELD_ENABLE_DOCS=1 while developing.
 _DOCS_ON = os.environ.get("HEATSHIELD_ENABLE_DOCS") == "1"
-app = FastAPI(title="HeatShield AI API", version="1.3.0",
-              description="Urban Heat Intelligence Platform for Moradabad, UP, India",
+app = FastAPI(title="HeatShield AI API", version="1.4.0",
+              description="Urban Heat Intelligence Platform for Moradabad and Delhi, India",
               docs_url="/docs" if _DOCS_ON else None, redoc_url=None,
               openapi_url="/openapi.json" if _DOCS_ON else None)
 
-_default_origins = "http://localhost:8000,http://127.0.0.1:8000"   # file:// ("null") no longer allowed by default
+_default_origins = "http://localhost:8000,http://127.0.0.1:8000"
 ALLOWED_ORIGINS = [o.strip() for o in os.environ.get("ALLOWED_ORIGINS", _default_origins).split(",") if o.strip()]
 app.add_middleware(
     CORSMiddleware,
@@ -80,9 +68,7 @@ START_TIME = time.time()
 
 # ------------------------------------------------------------ rate limit --
 class RateLimiter:
-    """Tiny in-memory sliding-window limiter (per client IP, per process).
-    Behind a reverse proxy every request shares the proxy's IP -- use the
-    proxy's own rate limiting in that case."""
+    """Tiny in-memory sliding-window limiter (per client IP, per process)."""
 
     def __init__(self, limit_per_min: int):
         self.limit = limit_per_min
@@ -128,7 +114,7 @@ SECURITY_HEADERS = {
     "Content-Security-Policy": CSP,
     "X-Content-Type-Options": "nosniff",
     "X-Frame-Options": "DENY",
-    "Referrer-Policy": "no-referrer",
+    "Referrer-Policy": "strict-origin-when-cross-origin",
     "Permissions-Policy": "geolocation=(), camera=(), microphone=(), payment=()",
     "Cross-Origin-Opener-Policy": "same-origin",
 }
@@ -171,14 +157,31 @@ async def _model_unavailable(_request, exc):
     return JSONResponse({"detail": f"model not available: {exc}"}, status_code=503)
 
 
+@app.exception_handler(WeatherUnavailable)
+async def _weather_unavailable(_request, exc):
+    return JSONResponse({"detail": str(exc)}, status_code=503)
+
+
 def _zone_public(zone_id, feats):
-    zone = ZONE_BY_ID[zone_id]
-    return {"zone_id": zone_id, "zone_name": zone["name"], "lat": zone["lat"], "lon": zone["lon"], **feats}
+    zone = ALL_ZONE_BY_ID[zone_id]
+    return {"zone_id": zone_id, "zone_name": zone["name"], "city": zone["city"],
+            "lat": zone["lat"], "lon": zone["lon"], **feats}
 
 
 def _require_zone(zone_id):
-    if zone_id not in ZONE_BY_ID:
+    if zone_id not in ALL_ZONE_BY_ID:
         raise HTTPException(404, "zone not found")
+
+
+def _require_city(city):
+    if city not in CITIES:
+        raise HTTPException(400, "Supported cities: " + ", ".join(CITIES))
+    return city
+
+
+def _mode(city):
+    """Delhi is LIVE-only (otherwise the request fails with 503)."""
+    return state.data_mode if city == PRIMARY_CITY else "LIVE"
 
 
 # ---------------------------------------------------------------- health ---
@@ -186,7 +189,7 @@ def _require_zone(zone_id):
 def health():
     snap_ok = True
     if state.model_ready():
-        state.get_snapshot()          # refreshes data_mode; cached, cheap
+        state.get_snapshot()
     else:
         snap_ok = False
     return {
@@ -202,13 +205,15 @@ def health():
 
 # --------------------------------------------------------------- current ---
 @app.get("/api/current")
-def current():
-    snapshot = state.get_snapshot()
+def current(city: str = Query(PRIMARY_CITY)):
+    _require_city(city)
+    snapshot = state.get_city_snapshot(city)
     zones_out = [_zone_public(zid, f) for zid, f in snapshot.items()]
     n = len(zones_out)
     hotspots, citywide = detect_hotspots({zid: f["risk_score"] for zid, f in snapshot.items()})
     return {
-        "data_mode": state.data_mode,
+        "city": city,
+        "data_mode": _mode(city),
         "timestamp": time.time(),
         "model_algorithm": state.algorithm,
         "avg_air_temp": round(sum(z["air_temp"] for z in zones_out) / n, 1),
@@ -223,19 +228,21 @@ def current():
 
 # ----------------------------------------------------------------- zones ---
 @app.get("/api/zones")
-def zones():
-    snapshot = state.get_snapshot()
-    return {"data_mode": state.data_mode,
+def zones(city: str = Query(PRIMARY_CITY)):
+    _require_city(city)
+    snapshot = state.get_city_snapshot(city)
+    return {"city": city, "data_mode": _mode(city),
             "zones": [_zone_public(zid, f) for zid, f in snapshot.items()]}
 
 
 @app.get("/api/zones/{zone_id}")
 def zone_detail(zone_id: str):
     _require_zone(zone_id)
+    city = ALL_ZONE_BY_ID[zone_id]["city"]
     feats = state.zone_snapshot(zone_id)
     explanation = state.explain_zone(zone_id)
     return {
-        "data_mode": state.data_mode,
+        "data_mode": _mode(city),
         **_zone_public(zone_id, feats),
         "feature_importance": state.feature_importance_pct(),
         "feature_importance_method": state.metadata.get("importance_method"),
@@ -245,24 +252,28 @@ def zone_detail(zone_id: str):
 
 # --------------------------------------------------------------- heatmap ---
 @app.get("/api/heatmap")
-def heatmap():
-    snapshot = state.get_snapshot()
+def heatmap(city: str = Query(PRIMARY_CITY)):
+    _require_city(city)
+    snapshot = state.get_city_snapshot(city)
     return {
-        "data_mode": state.data_mode,
-        "points": [{"zone_id": zid, "lat": ZONE_BY_ID[zid]["lat"], "lon": ZONE_BY_ID[zid]["lon"],
+        "city": city,
+        "data_mode": _mode(city),
+        "points": [{"zone_id": zid, "lat": ALL_ZONE_BY_ID[zid]["lat"], "lon": ALL_ZONE_BY_ID[zid]["lon"],
                     "risk_score": f["risk_score"]} for zid, f in snapshot.items()],
     }
 
 
 # -------------------------------------------------------------- hotspots ---
 @app.get("/api/hotspots")
-def hotspots():
-    snapshot = state.get_snapshot()
+def hotspots(city: str = Query(PRIMARY_CITY)):
+    _require_city(city)
+    snapshot = state.get_city_snapshot(city)
     scores = {zid: f["risk_score"] for zid, f in snapshot.items()}
     spots, citywide_event = detect_hotspots(scores)
-    out = [{**h, "zone_name": ZONE_BY_ID[h["zone_id"]]["name"], "detected_at": time.time()} for h in spots]
+    out = [{**h, "zone_name": ALL_ZONE_BY_ID[h["zone_id"]]["name"], "detected_at": time.time()} for h in spots]
     return {
-        "data_mode": state.data_mode,
+        "city": city,
+        "data_mode": _mode(city),
         "method": ("z-score anomaly detection (relative outlier, threshold=1.5σ) OR absolute risk >= 71 "
                    "(catches city-wide heatwaves that z-score alone would miss). Because zone land-cover "
                    "values are fixed priors, the same dense zones will usually rank highest."),
@@ -273,15 +284,18 @@ def hotspots():
 
 # -------------------------------------------------------------- forecast ---
 @app.get("/api/forecast")
-def forecast(zone_id: str = None, hours: int = Query(6, ge=1, le=48)):
+def forecast(zone_id: str = None, hours: int = Query(6, ge=1, le=48), city: str = Query(PRIMARY_CITY)):
+    _require_city(city)
     if zone_id is None:
-        zone_id = ZONES[0]["id"]
+        zone_id = zones_for_city(city)[0]["id"]
     _require_zone(zone_id)
     fc, method = state.forecast_zone_ml(zone_id, hours_ahead=hours)
+    zcity = ALL_ZONE_BY_ID[zone_id]["city"]
     return {
-        "data_mode": state.data_mode,
+        "city": zcity,
+        "data_mode": _mode(zcity),
         "zone_id": zone_id,
-        "zone_name": ZONE_BY_ID[zone_id]["name"],
+        "zone_name": ALL_ZONE_BY_ID[zone_id]["name"],
         "method": ("Real Open-Meteo hourly forecast run through the trained ML model"
                    if method == "live" else
                    "Trend + diurnal extrapolation over recent model outputs (live forecast weather unreachable)"),
@@ -296,19 +310,15 @@ _SEVERITY = {"ERROR": 4, "WARN": 3, "DEMO": 2, "ESTIMATE": 1, "OK": 0, "INFO": 0
 
 @app.get("/api/status")
 def status():
-    """Plain-language truth about every part of the system, for the dashboard's
-    status panel and inline badges. Levels: OK (real/working), DEMO (simulated),
-    ESTIMATE (assumption/approximation), WARN (degraded, check it), ERROR
-    (broken), MISSING (not connected), INFO (just so you know)."""
+    """Plain-language truth about every part of the system."""
     comps = []
 
     def add(cid, label, level, message):
         comps.append({"id": cid, "label": label, "level": level, "message": message})
 
     if state.model_ready():
-        state.get_snapshot()          # refresh data_mode; cached and cheap
+        state.get_snapshot()
 
-    # Weather
     if state.data_mode == "LIVE":
         age_min = (time.time() - state.live_weather["fetched_at"]) / 60
         if age_min > 20:
@@ -318,14 +328,12 @@ def status():
     else:
         add("weather", "Weather", "DEMO", "Open-Meteo not reachable: temperature/humidity/wind are SIMULATED")
 
-    # Zone land-cover priors / surface temp
     add("zone_priors", "Zone land-cover", "ESTIMATE",
         "Built-up, vegetation, roads, water are hand-set unverified values, not measured. "
         "Zone ranking and hotspots mostly come from these.")
     add("surface_temp", "Surface temperature", "ESTIMATE",
         "Computed from air temp + the estimates above, not a satellite measurement")
 
-    # Model
     if not state.model_ready():
         add("model", "ML model", "ERROR", f"Model not loaded: {state.model_error}. Predictions are unavailable.")
     elif state.model_warning:
@@ -336,7 +344,6 @@ def status():
             f"{state.algorithm} trained on SYNTHETIC data (R² {r2} only shows it learned the synthetic formula, "
             f"not real-world accuracy)")
 
-    # Forecast
     if state.last_forecast_method == "live":
         add("forecast", "Forecast", "OK", "Model run on Open-Meteo's real hourly forecast")
     elif state.last_forecast_method == "trend_fallback":
@@ -344,7 +351,6 @@ def status():
     else:
         add("forecast", "Forecast", "INFO", "Not requested yet (open the Forecast page)")
 
-    # Recommendations
     provider, llm = active_provider(), llm_status()
     if provider is None:
         add("recommendations", "Recommendations", "ESTIMATE",
@@ -357,7 +363,6 @@ def status():
     else:
         add("recommendations", "Recommendations", "INFO", f"{provider} configured, not used yet")
 
-    # History
     n = len(state.zone_history(ZONES[0]["id"])) if state.model_ready() else 0
     add("history", "History / trend", "INFO" if n < 3 else "OK",
         f"{n} stored point(s), 1 per {os.environ.get('HEATSHIELD_HISTORY_INTERVAL', '60')} s"
@@ -372,20 +377,23 @@ def status():
 
 # ---------------------------------------------------------------- history --
 @app.get("/api/history")
-def history(zone_id: str = None):
+def history(zone_id: str = None, city: str = Query(PRIMARY_CITY)):
+    _require_city(city)
     interval = float(os.environ.get("HEATSHIELD_HISTORY_INTERVAL", 60))
-    state.get_snapshot()
+    state.get_city_snapshot(city)
     if zone_id:
         _require_zone(zone_id)
         h = state.zone_history(zone_id)
-        return {"data_mode": state.data_mode, "zone_id": zone_id, "interval_seconds": interval,
+        return {"data_mode": _mode(city), "zone_id": zone_id, "interval_seconds": interval,
                 "timestamps": [t for t, _ in h], "risk_history": [s for _, s in h]}
-    avg = state.city_average_history()
+    avg = state.city_average_history(city)
+    ids = [z["id"] for z in zones_for_city(city)]
     return {
-        "data_mode": state.data_mode,
+        "city": city,
+        "data_mode": _mode(city),
         "interval_seconds": interval,
-        "risk_history": {zid: [s for _, s in state.zone_history(zid)] for zid in ZONE_BY_ID},
-        "timestamps": {zid: [t for t, _ in state.zone_history(zid)] for zid in ZONE_BY_ID},
+        "risk_history": {zid: [s for _, s in state.zone_history(zid)] for zid in ids},
+        "timestamps": {zid: [t for t, _ in state.zone_history(zid)] for zid in ids},
         "city_average": {"timestamps": [t for t, _ in avg], "risk": [r for _, r in avg]},
     }
 
@@ -395,11 +403,18 @@ def history(zone_id: str = None):
 def data_sources():
     provider = active_provider()
     w_status = weather_status()
+    try:
+        state.get_city_snapshot("Delhi")
+        delhi_status = "CONNECTED (live)"
+    except WeatherUnavailable:
+        delhi_status = "NOT REACHABLE"
     return {
         "data_mode": state.data_mode,
         "sources": [
-            {"name": "Weather (Open-Meteo, live, no key needed)",
+            {"name": "Weather: Moradabad (Open-Meteo, live, no key needed)",
              "status": w_status["status"], "last_updated": w_status["last_updated"]},
+            {"name": "Weather: Delhi zones (Open-Meteo, per-zone coordinates)",
+             "status": delhi_status, "last_updated": None},
             {"name": "Risk history (SQLite, survives restarts)", "status": "CONNECTED", "last_updated": None},
             {"name": "Satellite (Sentinel-2 / Landsat / GEE)", "status": "NOT CONFIGURED", "last_updated": None},
             {"name": "IoT Sensors", "status": "NOT CONFIGURED", "last_updated": None},
@@ -462,23 +477,34 @@ _rec_lock = threading.Lock()
 
 @app.get("/api/recommendations/{zone_id}")
 def recommendations(zone_id: str):
-    """Cached per zone for HEATSHIELD_REC_TTL seconds (default 600) so that
-    page refreshes / many clients can never multiply paid Claude API calls."""
+    """Cached per zone for HEATSHIELD_REC_TTL seconds (default 600)."""
     _require_zone(zone_id)
+    zcity = ALL_ZONE_BY_ID[zone_id]["city"]
     ttl = float(os.environ.get("HEATSHIELD_REC_TTL", 600))
     now = time.time()
     with _rec_lock:
         hit = _rec_cache.get(zone_id)
         if hit and now - hit[0] < ttl:
-            return {"data_mode": state.data_mode, **hit[1], "cached": True}
-    zone = ZONE_BY_ID[zone_id]
+            return {"data_mode": _mode(zcity), **hit[1], "cached": True}
+    zone = ALL_ZONE_BY_ID[zone_id]
     feats = state.zone_snapshot(zone_id)
     rec = get_recommendation(zone["name"], feats,
                              feature_importance=state.feature_importance_pct(),
                              drivers=state.explain_zone(zone_id)["drivers"])
     with _rec_lock:
         _rec_cache[zone_id] = (now, rec)
-    return {"data_mode": state.data_mode, **rec, "cached": False}
+    return {"data_mode": _mode(zcity), **rec, "cached": False}
+
+
+# ------------------------------------------------------------ city weather
+@app.get("/api/city-weather")
+def city_weather(city: str = Query("Delhi")):
+    if city not in ("Delhi", "Moradabad"):
+        raise HTTPException(400, "Supported cities: Delhi, Moradabad")
+    weather = get_city_weather(city)
+    if weather is None:
+        raise HTTPException(502, "Live weather is temporarily unavailable")
+    return weather
 
 
 # --------------------------------------------------------------- websocket
@@ -489,32 +515,29 @@ _ws_by_ip = defaultdict(int)
 
 
 def _origin_ok(websocket: WebSocket) -> bool:
-    """Browsers always send Origin on WebSocket. Block other websites from
-    opening our live feed (cross-site WebSocket hijacking)."""
     origin = websocket.headers.get("origin")
     if not origin:
-        return True                                  # non-browser client (curl, tests)
+        return True
     host = websocket.headers.get("host", "")
     return origin in ALLOWED_ORIGINS or origin.split("://", 1)[-1] == host
 
 
 @app.websocket("/ws/live")
 async def ws_live(websocket: WebSocket):
+    """Live feed for Moradabad. (Delhi is polled over REST by the dashboard.)"""
     global _ws_count
     ip = websocket.client.host if websocket.client else "unknown"
     if not _origin_ok(websocket):
-        await websocket.close(code=1008)          # policy violation
+        await websocket.close(code=1008)
         return
     if _ws_count >= MAX_WS or _ws_by_ip[ip] >= MAX_WS_PER_IP:
-        await websocket.close(code=1013)          # try again later
+        await websocket.close(code=1013)
         return
     await websocket.accept()
     _ws_count += 1
     _ws_by_ip[ip] += 1
     try:
         while True:
-            # to_thread: the snapshot may do a (cached, 4 s timeout) network
-            # call for weather; never block the event loop with it.
             snapshot = await asyncio.to_thread(state.get_snapshot)
             zones_out = [_zone_public(zid, f) for zid, f in snapshot.items()]
             avg_risk = round(sum(z["risk_score"] for z in zones_out) / len(zones_out), 1)
@@ -544,8 +567,21 @@ async def ws_live(websocket: WebSocket):
             _ws_by_ip.pop(ip, None)
 
 
-# Serve the dashboard from the same origin (no CORS / hard-coded URL needed).
-# Mounted LAST so it never shadows /api/* or /ws/*.
+# Serve the dashboard from the same origin. Mounted LAST so it never shadows /api/* or /ws/*.
+# ---------------------------------------------------- simple public view ---
+@app.get("/api/simple")
+def simple_view(city: str = Query(PRIMARY_CITY)):
+    """Real weather + 'feels like' + plain advice. No model, no simulation."""
+    _require_city(city)
+    from backend.services.weather import get_simple_city
+    from backend.services.recommendations import simple_advice
+    data = get_simple_city(city, zones_for_city(city))
+    if data is None:
+        raise HTTPException(503, "live weather unavailable")
+    data["advice"] = simple_advice(data["city_now"]["level"])
+    return data
+
+
 if os.path.isdir(FRONTEND_DIR):
     app.mount("/", StaticFiles(directory=FRONTEND_DIR, html=True), name="frontend")
 

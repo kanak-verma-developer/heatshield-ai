@@ -3,17 +3,14 @@ Central runtime state for HeatShield AI backend.
 
 Design notes
 ------------
-* ONE shared city snapshot. `get_snapshot()` recomputes at most every
-  SNAPSHOT_MAX_AGE seconds no matter how many REST calls / WebSocket
-  clients ask for it. Reading data never has side effects on history.
-* History is recorded by the snapshot logic at most once per
-  HISTORY_INTERVAL seconds (default 60) for the whole city, so
-  /api/history is a real, evenly spaced time series. Nothing is fabricated:
-  on a brand-new install the history simply starts empty.
+* ONE shared snapshot per city. `get_snapshot()` (Moradabad) and
+  `get_city_snapshot(city)` recompute at most every SNAPSHOT_MAX_AGE seconds
+  no matter how many REST calls / WebSocket clients ask for them.
+* History is recorded at most once per HISTORY_INTERVAL seconds. Moradabad
+  history is stored in SQLite; Delhi history is kept in memory only.
 * No random noise. Live mode = real Open-Meteo weather + fixed zone priors.
-  DEMO mode (weather unreachable) = deterministic physics-motivated
-  simulation whose clock runs SIM_SPEEDUP x faster than real time so the
-  demo visibly evolves. DEMO is always flagged via `data_mode`.
+  Moradabad has a flagged DEMO fallback (`data_mode`). Delhi is LIVE-only:
+  if its weather is unreachable we raise WeatherUnavailable, never simulate.
 * Zone attributes (built-up density, NDVI, road density, water proximity)
   are hand-set PRIORS (see data/zones.py), not measurements.
 * If the model file is missing/unloadable, prediction raises
@@ -31,9 +28,10 @@ import joblib
 import pandas as pd
 
 sys.path.append(os.path.join(os.path.dirname(__file__), "..", ".."))
-from data.zones import ZONES, ZONE_BY_ID
+from data.zones import ZONES, ZONE_BY_ID, ALL_ZONES, ALL_ZONE_BY_ID, zones_for_city
 from ml.forecasting import forecast_zone
-from backend.services.weather import get_live_weather, get_weather_forecast
+from backend.services.weather import (get_live_weather, get_weather_forecast,
+                                      get_zones_weather, get_location_forecast)
 from backend.services import db as history_db
 
 BASE = os.path.dirname(__file__)
@@ -57,9 +55,16 @@ HISTORY_INTERVAL = float(os.environ.get("HEATSHIELD_HISTORY_INTERVAL", 60))
 HISTORY_LEN = 288          # points kept per zone in memory (~4.8 h at 60 s)
 SIM_SPEEDUP = float(os.environ.get("HEATSHIELD_SIM_SPEEDUP", 60))  # DEMO mode only
 
+PRIMARY_CITY = "Moradabad"
+CITY_STALE_MAX_AGE = 900   # serve a cached non-primary city snapshot for at most 15 min
+
 
 class ModelNotAvailable(RuntimeError):
     pass
+
+
+class WeatherUnavailable(RuntimeError):
+    """Live weather for a non-primary city could not be fetched."""
 
 
 class HeatShieldState:
@@ -78,14 +83,15 @@ class HeatShieldState:
         self._snapshot_weather = None
         self._last_history_ts = 0.0
         self.last_forecast_method = None     # "live" | "trend_fallback" | None (never requested)
-        self.history = {z["id"]: [] for z in ZONES}   # zone_id -> [(ts, score)]
+        self.history = {z["id"]: [] for z in ALL_ZONES}   # zone_id -> [(ts, score)]
+        self._city_snaps = {}                # non-primary city -> {"snap", "ts", "weather"}
+        self._city_last_hist = {}            # non-primary city -> last history ts
 
         history_db.init_db()
         history_db.prune_old()
-        for z in ZONES:
+        for z in ZONES:                      # only Moradabad is stored in SQLite
             self.history[z["id"]] = history_db.load_recent(z["id"], limit=HISTORY_LEN)
-        # If history was restored, don't immediately write a duplicate point.
-        restored = [h[-1][0] for h in self.history.values() if h]
+        restored = [self.history[z["id"]][-1][0] for z in ZONES if self.history[z["id"]]]
         if restored:
             self._last_history_ts = max(restored)
 
@@ -130,7 +136,7 @@ class HeatShieldState:
 
     # --------------------------------------------------------- weather ----
     def _current_weather(self, now):
-        """City-wide weather: real Open-Meteo reading, or the DEMO simulation."""
+        """Moradabad weather: real Open-Meteo reading, or the DEMO simulation."""
         live = get_live_weather()
         self.live_weather = live
         if live is not None:
@@ -156,7 +162,7 @@ class HeatShieldState:
     # -------------------------------------------------------- features ----
     @staticmethod
     def _zone_weather(zone, w):
-        """City weather -> zone weather using a small, physically motivated
+        """Weather -> zone weather using a small, physically motivated
         urban-heat-island prior (an assumption, not per-zone sensor data)."""
         b, wp = zone["built_up_density"], zone["water_proximity"]
         return {
@@ -185,7 +191,7 @@ class HeatShieldState:
 
     # -------------------------------------------------------- snapshot ----
     def get_snapshot(self, max_age=None):
-        """{zone_id: features+risk_score}, shared by every caller."""
+        """{zone_id: features+risk_score} for Moradabad, shared by every caller."""
         max_age = SNAPSHOT_MAX_AGE if max_age is None else max_age
         with self._lock:
             now = time.time()
@@ -204,8 +210,58 @@ class HeatShieldState:
 
     tick = get_snapshot   # backwards-compatible alias
 
+    def get_city_snapshot(self, city, max_age=None):
+        """Snapshot for any supported city.
+
+        Moradabad -> the primary snapshot (may run in DEMO mode).
+        Other cities (Delhi) -> LIVE only, each zone uses the real weather of
+        its own coordinates. Raises WeatherUnavailable when real weather can't
+        be fetched and no recent cached snapshot exists."""
+        if city == PRIMARY_CITY:
+            return self.get_snapshot(max_age)
+        zones = zones_for_city(city)
+        if not zones:
+            raise KeyError(f"unsupported city: {city}")
+        max_age = SNAPSHOT_MAX_AGE if max_age is None else max_age
+        now = time.time()
+        with self._lock:
+            cached = self._city_snaps.get(city)
+            if cached and (now - cached["ts"]) < max_age:
+                return cached["snap"]
+        zw = get_zones_weather(zones)                    # network call: outside the lock
+        with self._lock:
+            now = time.time()
+            if zw is None:
+                cached = self._city_snaps.get(city)
+                if cached and (now - cached["ts"]) < CITY_STALE_MAX_AGE:
+                    return cached["snap"]
+                raise WeatherUnavailable(f"live weather for {city} is unavailable")
+            feats = {z["id"]: self._features_for(z, zw[z["id"]]) for z in zones}
+            risks = self._predict_rows([feats[z["id"]] for z in zones])
+            snap = {z["id"]: {**feats[z["id"]], "risk_score": round(risk, 2)}
+                    for z, risk in zip(zones, risks)}
+            self._city_snaps[city] = {"snap": snap, "ts": now, "weather": zw}
+            if now - self._city_last_hist.get(city, 0.0) >= HISTORY_INTERVAL:
+                for zid, f in snap.items():
+                    h = self.history[zid]
+                    h.append((now, f["risk_score"]))
+                    if len(h) > HISTORY_LEN:
+                        h.pop(0)
+                self._city_last_hist[city] = now
+            return snap
+
+    def zone_weather_used(self, zone_id):
+        """The weather the latest snapshot used for this zone."""
+        zone = ALL_ZONE_BY_ID[zone_id]
+        if zone["city"] == PRIMARY_CITY:
+            self.get_snapshot()
+            return self._snapshot_weather
+        self.get_city_snapshot(zone["city"])
+        return self._city_snaps[zone["city"]]["weather"][zone_id]
+
     def zone_snapshot(self, zone_id):
-        return self.get_snapshot()[zone_id]
+        zone = ALL_ZONE_BY_ID[zone_id]
+        return self.get_city_snapshot(zone["city"])[zone_id]
 
     def _record_history(self, snap, now):
         scores = {zid: f["risk_score"] for zid, f in snap.items()}
@@ -221,14 +277,15 @@ class HeatShieldState:
         with self._lock:
             return list(self.history[zone_id])
 
-    def city_average_history(self):
+    def city_average_history(self, city=PRIMARY_CITY):
         """[(ts, avg_risk)] over timestamps at which every zone has a reading."""
+        zones = zones_for_city(city)
         with self._lock:
             by_ts = {}
-            for h in self.history.values():
-                for ts, score in h:
+            for z in zones:
+                for ts, score in self.history[z["id"]]:
                     by_ts.setdefault(ts, []).append(score)
-            n = len(ZONES)
+            n = len(zones)
             return [(ts, round(sum(v) / len(v), 2)) for ts, v in sorted(by_ts.items()) if len(v) == n]
 
     # ----------------------------------------------------- explanation ----
@@ -240,20 +297,20 @@ class HeatShieldState:
     def explain_zone(self, zone_id):
         """Zone-specific, MODEL-DRIVEN explanation (counterfactual).
 
-        For each zone attribute (built-up density, NDVI, road density,
-        water proximity) the model is re-run with that attribute replaced by
-        the city-wide mean of the zone priors (surface temperature and the
-        urban-heat-island adjustments are recomputed consistently). The
-        change in predicted risk is that attribute's contribution relative to
-        an 'average Moradabad zone' -- in risk points, not a global
-        importance percentage."""
-        zone = ZONE_BY_ID[zone_id]
-        self.get_snapshot()
-        weather = self._snapshot_weather
+        For each zone attribute the model is re-run with that attribute
+        replaced by the mean of the zone priors of the SAME city (surface
+        temperature and urban-heat-island adjustments are recomputed
+        consistently). The change in predicted risk is that attribute's
+        contribution relative to an 'average zone of that city'."""
+        zone = ALL_ZONE_BY_ID[zone_id]
+        city = zone["city"]
+        city_zones = zones_for_city(city)
+        snap = self.get_city_snapshot(city)
+        weather = self.zone_weather_used(zone_id)
         actual = self._predict_rows([self._features_for(zone, weather)])[0]
         keys = {"built_up_density": "built_up_density", "ndvi": "ndvi_base",
                 "road_density": "road_density", "water_proximity": "water_proximity"}
-        means = {k: sum(z[v] for z in ZONES) / len(ZONES) for k, v in keys.items()}
+        means = {k: sum(z[v] for z in city_zones) / len(city_zones) for k, v in keys.items()}
         counterfactuals = []
         for k, zkey in keys.items():
             alt = dict(zone)
@@ -270,10 +327,10 @@ class HeatShieldState:
                 "risk_points_vs_city_avg": round(actual - alt_risk, 1),
             })
         drivers.sort(key=lambda d: -abs(d["risk_points_vs_city_avg"]))
-        city_avg = sum(self.get_snapshot()[z["id"]]["risk_score"] for z in ZONES) / len(ZONES)
+        city_avg = sum(snap[z["id"]]["risk_score"] for z in city_zones) / len(city_zones)
         text = self._explanation_text(zone["name"], actual, city_avg, drivers)
         return {"risk_explanation": text, "drivers": drivers,
-                "method": "counterfactual re-prediction vs city-average zone priors"}
+                "method": f"counterfactual re-prediction vs {city}-average zone priors"}
 
     @staticmethod
     def _explanation_text(name, risk, city_avg, drivers):
@@ -293,11 +350,18 @@ class HeatShieldState:
 
     # -------------------------------------------------------- forecast ----
     def forecast_zone_ml(self, zone_id, hours_ahead=6):
-        """Run the trained model on Open-Meteo's real hourly forecast; fall
-        back to trend extrapolation of recent history if unreachable."""
-        zone = ZONE_BY_ID.get(zone_id)
-        wf = get_weather_forecast(hours_ahead) if zone else None
-        if zone is not None and wf is not None and self.model is not None:
+        """Run the trained model on Open-Meteo's real hourly forecast.
+        Moradabad falls back to trend extrapolation if unreachable; Delhi
+        raises WeatherUnavailable (no made-up numbers)."""
+        zone = ALL_ZONE_BY_ID.get(zone_id)
+        is_primary = zone is not None and zone["city"] == PRIMARY_CITY
+        if zone is None:
+            wf = None
+        elif is_primary:
+            wf = get_weather_forecast(hours_ahead)
+        else:
+            wf = get_location_forecast(zone["lat"], zone["lon"], hours_ahead)
+        if wf is not None and self.model is not None:
             rows = [self._features_for(zone, row) for row in wf]
             risks = self._predict_rows(rows)
             base_rmse = self.metadata.get("metrics", {}).get("rmse", 3.5)
@@ -314,8 +378,11 @@ class HeatShieldState:
                     "upper": round(min(100, risk + u), 1),
                     "source": "ml_model+live_forecast",
                 })
-            self.last_forecast_method = "live"
+            if is_primary:
+                self.last_forecast_method = "live"
             return out, "live"
+        if not is_primary:
+            raise WeatherUnavailable("live forecast for this zone is unavailable")
         self.get_snapshot()   # make sure at least one reading exists
         recent = [s for _, s in self.zone_history(zone_id)][-12:]
         self.last_forecast_method = "trend_fallback"

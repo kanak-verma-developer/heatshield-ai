@@ -1,13 +1,13 @@
 {
   "model_name": "HeatRiskModel",
   "version": "1.2",
-  "sklearn_version": "1.8.0",
+  "sklearn_version": "1.5.1",
   "algorithm": "Ridge",
   "hyperparameters": {
     "ridge__alpha": 0.3149
   },
   "tuning_method": "RandomizedSearchCV (12 candidates x 3-fold CV per algorithm)",
-  "trained_at_unix": 1790966439,
+  "trained_at_unix": 1792001147,
   "dataset": "synthetic (data/training_data.csv)",
   "dataset_rows": 24090,
   "train_rows": 19272,
@@ -78,14 +78,14 @@
   },
   "synthetic_noise_ceiling_r2": 0.8805,
   "feature_importance": {
-    "surface_temp": 0.575579499996765,
-    "built_up_density": 0.25448088777869715,
-    "ndvi": 0.08882093908095588,
-    "road_density": 0.04634779224351766,
-    "humidity": 0.021695996631013636,
-    "air_temp": 0.007570762374167951,
-    "water_proximity": 0.0050615681585888745,
-    "wind_speed": 0.00044255373629379074
+    "surface_temp": 0.5755794999967666,
+    "built_up_density": 0.25448088777868266,
+    "ndvi": 0.08882093908095146,
+    "road_density": 0.04634779224351874,
+    "humidity": 0.02169599663101286,
+    "air_temp": 0.0075707623741851655,
+    "water_proximity": 0.0050615681585900185,
+    "wind_speed": 0.00044255373629239336
   },
   "importance_method": "absolute standardized linear coefficient, normalized to sum to 1 (global, not causal)",
   "linear_coefficients": {
